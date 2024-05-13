@@ -6270,7 +6270,6 @@ void domainSearchUnitTest2() {
 }
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-
 // Ashwani
 // Added this routine to get the full path of DPIReader program.
 //

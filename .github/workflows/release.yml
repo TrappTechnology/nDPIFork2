@@ -1,0 +1,35 @@
+name: NDPI Build
+on:
+  pull_request:
+#    types: [ assigned, opened, synchronize, reopened ]
+    branches: [ dev ]
+  workflow_dispatch:
+env:
+  signTool: "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.22621.0\\x64\\signtool.exe"
+  signCert: "C:\\vault\\signCert.pfx"
+jobs:
+  ATCTest:
+    name: NDPI Build
+    runs-on: [self-hosted, Windows, x64,build]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+         repository: TrappTechnology/nDPIFork2
+         path: nDPIFork
+      - name: check branch
+        run: echo ${{ github.head_ref }}
+      - name: build ndpi
+        working-directory: .\nDPIFork\scripts\
+        run: cmd /c .\build_nDPISolution_DEBUGndpiReader.bat
+      - name: set dev customer
+        continue-on-error: true
+        run: "cmd /c \"C:\\Program Files\\armorpoint\\working\\armorAgent\\armorAgent.exe\" register ${{ secrets.CICD_DEV_CUSTOMER }} ${{ secrets.CICD_DEV_API_KEY }}"
+      - name: sign release
+        run: "cmd /c \"${{ env.signTool }}\" sign /f \"${{ env.signCert }}\" /p ${{ secrets.AP_2025_CODESIGN }} /t http://timestamp.digicert.com /fd SHA256 .\\nDPIFork\\setup\\nDPIReader\\ndpiReader.exe"
+      - name: upload release exe
+        run: "cmd /c \"C:\\Program Files\\armorpoint\\working\\armorAgent\\armorAgent.exe\" uploadFile 4ea16631-23b4-43a6-9af3-43c01c743c85 .\\nDPIFork\\setup\\nDPIReader\\ndpiReader.exe"
+      - name: compress ndpi dependencies
+        working-directory: .\nDPIFork\setup\Dlls\
+        run: "cmd /c powershell Compress-Archive -Force -Path .\\* -DestinationPath ..\\..\\out\\ndpiDependencies.zip"
+      - name: upload ndpi dependencies
+        run: "cmd /c \"C:\\Program Files\\armorpoint\\working\\armorAgent\\armorAgent.exe\" uploadFile a9dde35b-1746-4369-b3ac-b163deddb13e .\\nDPIFork\\out\\ndpiDependencies.zip"

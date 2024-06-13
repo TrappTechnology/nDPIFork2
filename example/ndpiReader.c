@@ -6451,6 +6451,29 @@ static void renameCurrentTempFile()
     }
 }
 
+static void PrintError(DWORD errorCode) 
+{
+    LPVOID errorMessage;
+
+    // Format the error message
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        errorCode,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPWSTR)&errorMessage,
+        0,
+        NULL
+    );
+
+    // Print the error message
+    printMessage(serializationLogFile, "ERROR: %s\n", errorMessage);
+  
+
+    // Free the buffer allocated by FormatMessage
+    LocalFree(errorMessage);
+}
+
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 /**
@@ -6485,7 +6508,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 05.11.2024-1 - First Submission to nDPIFork2 repository\n");
+    printMessage(serializationLogFile, "nDPI Version 06.13.2024-1 - Handle case of Alerts/Events directory already exists\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;
@@ -6560,14 +6583,24 @@ int main(int argc, char** argv)
 
     if (!CreateDirectory(alertFolder, NULL))
     {
-        printMessage(serializationLogFile, "ERROR: Unable to Create Alerts Folder\n");
-        fclose(serializationLogFile);
-        exit(0);
+        DWORD errorCode = GetLastError();
+
+        // Check if the error code indicates that the directory already exists
+        if (errorCode == ERROR_ALREADY_EXISTS) 
+        {
+            printMessage(serializationLogFile, "Alerts Folder already exists\n");
+        }
+        else 
+        {
+            // Print the error message for other errors
+            PrintError(errorCode);
+            fclose(serializationLogFile);
+            exit(0);
+        }        
     }
     else
     {
-        printMessage(serializationLogFile, "Alerts Folder created at %s\n", alertFolder);
-        
+        printMessage(serializationLogFile, "Alerts Folder created at %s\n", alertFolder);        
     }
 
     free(alertFolder);
@@ -6586,9 +6619,20 @@ int main(int argc, char** argv)
 
     if (!CreateDirectory(eventFolder, NULL))
     {
-        printMessage(serializationLogFile, "ERROR: Unable to Create Events Folder\n");
-        fclose(serializationLogFile);
-        exit(0);       
+        DWORD errorCode = GetLastError();
+
+        // Check if the error code indicates that the directory already exists
+        if (errorCode == ERROR_ALREADY_EXISTS)
+        {
+            printMessage(serializationLogFile, "Events Folder already exists\n");
+        }
+        else
+        {
+            // Print the error message for other errors
+            PrintError(errorCode);
+            fclose(serializationLogFile);
+            exit(0);
+        }
     }
     else
     {
@@ -6630,13 +6674,13 @@ int main(int argc, char** argv)
 
             _pcap_file[0] = pcap_files[currentFileIndex];
 
-            printMessage(serializationLogFile, "Processing (%s) [Start]\n", _pcap_file[0]);
+            printMessage(serializationLogFile, "\tProcessing (%s) [Start]", _pcap_file[0]);
             for (i = 0; i < num_loops; i++)
             {
                 test_lib();
             }
 
-            printMessage(serializationLogFile, "\n\tProcessing (%s) [End]\n", _pcap_file[0]);
+            printMessage(serializationLogFile, "\tProcessing (%s) [End]\n\n", _pcap_file[0]);
             renameCurrentTempFile();
 
             if (results_path)  ndpi_free(results_path);

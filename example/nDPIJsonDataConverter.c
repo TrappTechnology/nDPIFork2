@@ -32,8 +32,8 @@ struct NDPI_tls
 {
     char* version;
     char* server_names;
-    char* ja3;
-    char* ja3s;
+    char* ja4;
+    // char* ja3s;
     char* cipher;
     char* issuerDN;
     char* subjectDN;
@@ -258,8 +258,8 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
     result.confidence.value = NULL;
     result.tls.version = NULL;
     result.tls.server_names = NULL;
-    result.tls.ja3 = NULL;
-    result.tls.ja3s = NULL;
+    result.tls.ja4 = NULL;
+    //result.tls.ja3s = NULL;
     result.tls.cipher = NULL;
     result.tls.issuerDN = NULL;
     result.tls.subjectDN = NULL;
@@ -373,17 +373,17 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
                 result.tls.server_names = _strdup(json_object_get_string(server_names_object));
             }
 
-            json_object* ja3_object;
-            if (json_object_object_get_ex(tlsObject, "ja3", &ja3_object))
+            json_object* ja4_object;
+            if (json_object_object_get_ex(tlsObject, "ja4", &ja4_object))
             {
-                result.tls.ja3 = _strdup(json_object_get_string(ja3_object));
+                result.tls.ja4 = _strdup(json_object_get_string(ja4_object));
             }
 
-            json_object* ja3s_object;
-            if (json_object_object_get_ex(tlsObject, "ja3s", &ja3s_object))
-            {
-                result.tls.ja3s = _strdup(json_object_get_string(ja3s_object));
-            }
+            //json_object* ja3s_object;
+            //if (json_object_object_get_ex(tlsObject, "ja3s", &ja3s_object))
+            //{
+            //    result.tls.ja3s = _strdup(json_object_get_string(ja3s_object));
+            //}
 
             json_object* cipher_object;
             if (json_object_object_get_ex(tlsObject, "cipher", &cipher_object))
@@ -678,9 +678,9 @@ static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi)
         
     }
 
-    if (ndpi->tls.ja3 != NULL)
+    if (ndpi->tls.ja4 != NULL)
     {
-        json_object_object_add(client, "ja3", json_object_new_string(ndpi->tls.ja3));
+        json_object_object_add(client, "ja4", json_object_new_string(ndpi->tls.ja4));
         addClient = TRUE;     
     }
 
@@ -696,12 +696,11 @@ static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi)
 
     json_object* server = json_object_new_object();
     bool addServer = FALSE;
-    if (ndpi->tls.ja3s != NULL)
-    {
-        json_object_object_add(server, "ja3", json_object_new_string(ndpi->tls.ja3s));        
-        addServer = TRUE;
-    }
-
+    //if (ndpi->tls.ja3s != NULL)
+    //{
+    //    json_object_object_add(server, "ja3", json_object_new_string(ndpi->tls.ja3s));        
+    //    addServer = TRUE;
+    //}
 
     if (ndpi->tls.issuerDN != NULL)
     {
@@ -827,15 +826,15 @@ static void FreeConvertnDPIDataFormat(struct NDPI_Data* ndpiData)
         free(ndpiData->tls.server_names);
     }
 
-    if (ndpiData->tls.ja3 != NULL)
+    if (ndpiData->tls.ja4 != NULL)
     {
-        free(ndpiData->tls.ja3);
+        free(ndpiData->tls.ja4);
     }
 
-    if (ndpiData->tls.ja3s != NULL)
-    {
-        free(ndpiData->tls.ja3s);
-    }
+    //if (ndpiData->tls.ja3s != NULL)
+    //{
+    //    free(ndpiData->tls.ja3s);
+    //}
 
     if (ndpiData->tls.cipher != NULL)
     {

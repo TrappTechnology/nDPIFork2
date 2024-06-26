@@ -117,6 +117,7 @@ int number_of_valid_files_found = 0;
 int currentFileIndex = -1;
 
 static void printMessage(FILE* serializationLogFile, const char* format, ...);
+static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...);
 /*--------------------------------------Ashwani end--------------------------------------------*/
 
 
@@ -2271,7 +2272,7 @@ static void printFlowSerialized(struct ndpi_flow_info *flow)
   float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
 
   // Ashwani added code starts here
-  ndpi_serialize_string_uint32(serializer, "flow_id", flow->hashval);
+  ndpi_serialize_string_uint32(serializer, "flow_id", flow->flow_id);
 
   time_t start_seconds = f / 1000;
   struct tm* timeinfo;
@@ -4738,7 +4739,9 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
  */
 static void ndpi_process_packet(u_char *args,
 				const struct pcap_pkthdr *header,
-				const u_char *packet) {
+				const u_char *packet) 
+{
+  printDetailedLoggingMessage(NULL, "Inside ndpi_process_packet()\n");
   struct ndpi_proto p;
   ndpi_risk flow_risk;
   u_int16_t thread_id = *((u_int16_t*)args);
@@ -4861,6 +4864,8 @@ static void ndpi_process_packet(u_char *args,
     ndpi_free(packet_checked);
     packet_checked = NULL;
   }
+
+  printDetailedLoggingMessage(NULL, "End of ndpi_process_packet()\n");
 }
 
 #ifndef USE_DPDK
@@ -4868,7 +4873,9 @@ static void ndpi_process_packet(u_char *args,
  * @brief Call pcap_loop() to process packets from a live capture or savefile
  */
 static void runPcapLoop(u_int16_t thread_id) {
-  if((!shutdown_app) && (ndpi_thread_info[thread_id].workflow->pcap_handle != NULL)) {
+  printDetailedLoggingMessage(NULL, "Inside runPcapLoop()\n");
+  if((!shutdown_app) && (ndpi_thread_info[thread_id].workflow->pcap_handle != NULL)) 
+  {
     int datalink_type = pcap_datalink(ndpi_thread_info[thread_id].workflow->pcap_handle);
     if(!ndpi_is_datalink_supported(datalink_type)) {
       printf("Unsupported datalink %d. Skip pcap\n", datalink_type);
@@ -4878,6 +4885,7 @@ static void runPcapLoop(u_int16_t thread_id) {
     if (ret == -1)
       printf("Error while reading pcap file: '%s'\n", pcap_geterr(ndpi_thread_info[thread_id].workflow->pcap_handle));
   }
+  printDetailedLoggingMessage(NULL, "End of runPcapLoop()\n");
 }
 #endif
 
@@ -4885,6 +4893,7 @@ static void runPcapLoop(u_int16_t thread_id) {
  * @brief Process a running thread
  */
 void * processing_thread(void *_thread_id) {
+    printDetailedLoggingMessage(NULL, "Inside processing_thread()\n");
 #ifdef WIN64
   long long int thread_id = (long long int)_thread_id;
 #else
@@ -4966,6 +4975,7 @@ void * processing_thread(void *_thread_id) {
     bpf_cfilter = NULL;
   }
 
+  printDetailedLoggingMessage(NULL, "End of processing_thread()\n");
   return NULL;
 }
 
@@ -4975,6 +4985,8 @@ void * processing_thread(void *_thread_id) {
  * @brief Begin, process, end detection process
  */
 void test_lib() {
+
+  printDetailedLoggingMessage(NULL, "Inside test_lib()\n");
   u_int64_t processing_time_usec, setup_time_usec;
 #ifdef WIN64
   long long int thread_id;
@@ -5039,6 +5051,7 @@ void test_lib() {
   }
 
   ndpi_global_deinit(g_ctx);
+  printDetailedLoggingMessage(NULL, "End of test_lib()\n");
 }
 
 /* *********************************************** */
@@ -6291,22 +6304,16 @@ static void getExecutablePath(char* buffer, size_t size)
 //
 static void getParentFolderPathOfExecutable(char* buffer, size_t size)
 {
-#ifdef _WIN32
+    printDetailedLoggingMessage(NULL, "\tInside getParentFolderPathOfExecutable()\n");
     GetModuleFileName(NULL, buffer, size);
     char* lastBackslash = strrchr(buffer, '\\');
-    if (lastBackslash != NULL) {
+    if (lastBackslash != NULL) 
+    {
         *lastBackslash = '\0'; // Remove the executable name       
     }
-#elif defined(__linux__) || defined(__APPLE__)
-    char path[1024];
-    ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
-    if (len != -1) {
-        path[len] = '\0';
-        char* folderName = dirname(path);
-        strncpy(buffer, folderName, size);
-    }
-#endif
-    }
+
+    printDetailedLoggingMessage(NULL, "\tEnd of getParentFolderPathOfExecutable()\n");
+}
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 // Ashwani
@@ -6328,6 +6335,22 @@ static int isFileEmpty(FILE* file)
 
     // Check if the file is empty
     return size == 0;
+}
+
+/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
+static int isDetailedLoggingTurnedON()
+{
+    const char* env_var = "NDPI_LOGGING_ON";
+    static int value_initialized = 0;
+    static int is_logging_on = 0;
+
+    if (!value_initialized) {
+        char* value = getenv(env_var);
+        is_logging_on = value ? 1 : 0;
+        value_initialized = 1;
+    }
+
+    return is_logging_on;
 }
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
@@ -6355,6 +6378,18 @@ static void printMessage(FILE* serializationLogFile, const char* format, ...)
         }
     }
 #endif
+}
+
+/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
+static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...)
+{
+    if (isDetailedLoggingTurnedON())
+    {
+        va_list args;
+        va_start(args, format);
+        printMessage(serializationLogFile, format, args);
+        va_end(args);
+    }
 }
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
@@ -6474,29 +6509,35 @@ static void PrintError(DWORD errorCode)
     LocalFree(errorMessage);
 }
 
-
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 /**
    @brief MAIN FUNCTION
 **/
 int main(int argc, char** argv)
 {
+    printDetailedLoggingMessage(NULL, "1: main method calling getParentFolderPathOfExecutable()\n");
     getParentFolderPathOfExecutable(moduleFolderPath, sizeof(moduleFolderPath));
+    printDetailedLoggingMessage(NULL, "2: main method returns from getParentFolderPathOfExecutable()\n");
     int logFileSize = strlen(moduleFolderPath) + strlen("nDPIReader_Log_File.txt");
 
     char* logFile = (char*)malloc(logFileSize * sizeof(char));
     if (logFile == 0)
     {
-        printMessage(NULL, "Call to malloc failed due to error: %s\n", strerror(errno));
+        printMessage(NULL, "ERROR: Call to malloc failed due to error: %s\n", strerror(errno));
         exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "3: memory allocation is succcesful\n");
     }
 
     strcpy(logFile, moduleFolderPath);
     strcat(logFile, "\\nDPIReader_Log_File.txt");
 
+    printDetailedLoggingMessage(NULL, "4: Before call to fopen\n");
     if ((serializationLogFile = fopen(logFile, "w")) == NULL)
     {
-        printMessage(NULL, "Unable to create log file %s: %s\n", logFile, strerror(errno));
+        printMessage(NULL, "ERROR: Unable to create log file %s: %s\n", logFile, strerror(errno));
         exit(0);
     }
 
@@ -6508,7 +6549,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 06.13.2024-1 - Handle case of Alerts/Events directory already exists\n");
+    printMessage(serializationLogFile, "nDPI Version 06.25.2024-1 - Added NDPI_LOGGING_ON environment variable and flow.id not a hash value. Replaced ja3 with ja4.\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;
@@ -6521,6 +6562,7 @@ int main(int argc, char** argv)
     {
         ac_automata_enable_debug(1);
     }
+
     parseOptions(argc, argv);
 
     if(domain_to_check) 

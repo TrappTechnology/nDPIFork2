@@ -1,2 +1,3 @@
 @call "C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
 @call "C:\Program Files (x86)\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"  "..\windows\nDPI.sln" /property:Configuration=Release
+

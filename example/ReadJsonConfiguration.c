@@ -189,10 +189,12 @@ static void printParamsVector(const struct SkipParameters* paramsVector, int vec
 }
 
 /*--------------------------------------------------------------------------------------------------------------------------*/
- bool IsValidFlowForLogging(struct ndpi_flow_info* flow)
+ bool IsValidFlowForLogging(LoggingFunction logFunc, FILE* serializationLogFile, struct ndpi_flow_info* flow)
 {
+    logFunc(serializationLogFile, "Inside IsValidFlowForLogging()\n");
     if (!hasAlreadyReadLogFile)
     {
+        logFunc(serializationLogFile, "IsValidFlowForLogging() -> Reading log file for the first time \n");
         char buffer[1024];
         const char* configurationFileName = "Settings\\nDPIConfiguration.json";
 
@@ -203,12 +205,13 @@ static void printParamsVector(const struct SkipParameters* paramsVector, int vec
         // Append the file name to the folder path
         char configurationFilePath[MAX_PATH_LENGTH];
         appendFileNameToPath(configurationFileName, programFolderPath, configurationFilePath, sizeof(configurationFilePath));
-        printf("\nConfiguration file location: %s\n", configurationFilePath);
 
+        logFunc(serializationLogFile, "\nIsValidFlowForLogging() -> Configuration file location: %s\n", configurationFilePath);
+       
         FILE* fp = fopen(configurationFilePath, "r");
         if (fp == NULL)
         {
-            perror("Error opening file");
+            logFunc(serializationLogFile, "\nIsValidFlowForLogging() -> ERROR while opening configuration file");
             return true;
         }
 
@@ -225,7 +228,7 @@ static void printParamsVector(const struct SkipParameters* paramsVector, int vec
         root = json_tokener_parse(buffer);
         if (root == NULL)
         {
-            fprintf(stderr, "Error parsing JSON\n");
+            logFunc(serializationLogFile, "\nIsValidFlowForLogging() -> ERROR while parsing json file");
             return true;
         }
 
@@ -261,5 +264,11 @@ static void printParamsVector(const struct SkipParameters* paramsVector, int vec
     int destinationPort = flow->dst_port;
     u_int32_t destinationPortToCompare = ntohs(destinationPort);
 
-    return !matchEntryInParamsVector(src_name, dst_name, destinationPortToCompare);
+    logFunc(serializationLogFile, "\nIsValidFlowForLogging() -> Before call to matchEntryInParamsVector() method");
+
+    bool result =  !matchEntryInParamsVector(src_name, dst_name, destinationPortToCompare);
+
+    logFunc(serializationLogFile, "\nIsValidFlowForLogging() -> After call to matchEntryInParamsVector() method");
+
+    return result;
 }

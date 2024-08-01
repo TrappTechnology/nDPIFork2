@@ -32,8 +32,8 @@ struct NDPI_tls
 {
     char* version;
     char* server_names;
-    char* ja3;
-    char* ja3s;
+    char* ja4;
+    // char* ja3s;
     char* cipher;
     char* issuerDN;
     char* subjectDN;
@@ -258,8 +258,8 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
     result.confidence.value = NULL;
     result.tls.version = NULL;
     result.tls.server_names = NULL;
-    result.tls.ja3 = NULL;
-    result.tls.ja3s = NULL;
+    result.tls.ja4 = NULL;
+    //result.tls.ja3s = NULL;
     result.tls.cipher = NULL;
     result.tls.issuerDN = NULL;
     result.tls.subjectDN = NULL;
@@ -373,17 +373,17 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
                 result.tls.server_names = _strdup(json_object_get_string(server_names_object));
             }
 
-            json_object* ja3_object;
-            if (json_object_object_get_ex(tlsObject, "ja3", &ja3_object))
+            json_object* ja4_object;
+            if (json_object_object_get_ex(tlsObject, "ja4", &ja4_object))
             {
-                result.tls.ja3 = _strdup(json_object_get_string(ja3_object));
+                result.tls.ja4 = _strdup(json_object_get_string(ja4_object));
             }
 
-            json_object* ja3s_object;
-            if (json_object_object_get_ex(tlsObject, "ja3s", &ja3s_object))
-            {
-                result.tls.ja3s = _strdup(json_object_get_string(ja3s_object));
-            }
+            //json_object* ja3s_object;
+            //if (json_object_object_get_ex(tlsObject, "ja3s", &ja3s_object))
+            //{
+            //    result.tls.ja3s = _strdup(json_object_get_string(ja3s_object));
+            //}
 
             json_object* cipher_object;
             if (json_object_object_get_ex(tlsObject, "cipher", &cipher_object))
@@ -615,38 +615,31 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
     return result;
 }
 
-static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi)
+static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi, int flowRiskIndex)
 {
     // Create a new JSON object for ndpi
     //json_object* root = json_object_new_object();
     json_object* ndpiObj = json_object_new_object();
 
     // Serialize flow_risk
-    json_object* flowRiskArray = json_object_new_array();
+   
     for (size_t i = 0; i < ndpi->flow_risk_count; ++i) 
     {
-        json_object* riskObj = json_object_new_object();
-        json_object_object_add(riskObj, "key", json_object_new_int(ndpi->flow_risk[i].key));
-        json_object_object_add(riskObj, "description", json_object_new_string(ndpi_risk2description((ndpi_risk_enum)ndpi->flow_risk[i].key)));
-        json_object_object_add(riskObj, "risk", json_object_new_string(ndpi->flow_risk[i].risk));
-        json_object_object_add(riskObj, "severity", json_object_new_string(ndpi->flow_risk[i].severity));
+        if (i == flowRiskIndex)
+        {
+            json_object* riskObj = json_object_new_object();
+            json_object_object_add(riskObj, "key", json_object_new_int(ndpi->flow_risk[i].key));
+            json_object_object_add(riskObj, "description", json_object_new_string(ndpi_risk2description((ndpi_risk_enum)ndpi->flow_risk[i].key)));
+            json_object_object_add(riskObj, "risk", json_object_new_string(ndpi->flow_risk[i].risk));
+            json_object_object_add(riskObj, "severity", json_object_new_string(ndpi->flow_risk[i].severity));
 
-        json_object* riskScoreObj = json_object_new_object();
-        json_object_object_add(riskScoreObj, "total", json_object_new_int(ndpi->flow_risk[i].risk_score.total));
-        json_object_object_add(riskScoreObj, "client", json_object_new_int(ndpi->flow_risk[i].risk_score.client));
-        json_object_object_add(riskScoreObj, "server", json_object_new_int(ndpi->flow_risk[i].risk_score.server));
-        json_object_object_add(riskObj, "risk_score", riskScoreObj);
-
-        json_object_array_add(flowRiskArray, riskObj);
-    }
-
-    if (ndpi->flow_risk_count > 0)
-    {
-        json_object_object_add(ndpiObj, "flow_risk", flowRiskArray);        
-    }
-    else
-    {
-        json_object_put(flowRiskArray);
+            json_object* riskScoreObj = json_object_new_object();
+            json_object_object_add(riskScoreObj, "total", json_object_new_int(ndpi->flow_risk[i].risk_score.total));
+            json_object_object_add(riskScoreObj, "client", json_object_new_int(ndpi->flow_risk[i].risk_score.client));
+            json_object_object_add(riskScoreObj, "server", json_object_new_int(ndpi->flow_risk[i].risk_score.server));
+            json_object_object_add(riskObj, "risk_score", riskScoreObj);
+            json_object_object_add(ndpiObj, "flow_risk", riskObj);
+        }
     }
 
     //  Serialize confidence
@@ -678,9 +671,9 @@ static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi)
         
     }
 
-    if (ndpi->tls.ja3 != NULL)
+    if (ndpi->tls.ja4 != NULL)
     {
-        json_object_object_add(client, "ja3", json_object_new_string(ndpi->tls.ja3));
+        json_object_object_add(client, "ja4", json_object_new_string(ndpi->tls.ja4));
         addClient = TRUE;     
     }
 
@@ -696,12 +689,11 @@ static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi)
 
     json_object* server = json_object_new_object();
     bool addServer = FALSE;
-    if (ndpi->tls.ja3s != NULL)
-    {
-        json_object_object_add(server, "ja3", json_object_new_string(ndpi->tls.ja3s));        
-        addServer = TRUE;
-    }
-
+    //if (ndpi->tls.ja3s != NULL)
+    //{
+    //    json_object_object_add(server, "ja3", json_object_new_string(ndpi->tls.ja3s));        
+    //    addServer = TRUE;
+    //}
 
     if (ndpi->tls.issuerDN != NULL)
     {
@@ -827,15 +819,15 @@ static void FreeConvertnDPIDataFormat(struct NDPI_Data* ndpiData)
         free(ndpiData->tls.server_names);
     }
 
-    if (ndpiData->tls.ja3 != NULL)
+    if (ndpiData->tls.ja4 != NULL)
     {
-        free(ndpiData->tls.ja3);
+        free(ndpiData->tls.ja4);
     }
 
-    if (ndpiData->tls.ja3s != NULL)
-    {
-        free(ndpiData->tls.ja3s);
-    }
+    //if (ndpiData->tls.ja3s != NULL)
+    //{
+    //    free(ndpiData->tls.ja3s);
+    //}
 
     if (ndpiData->tls.cipher != NULL)
     {
@@ -943,9 +935,9 @@ static void FreeConvertRootDataFormat(struct Root_data* rootData)
 
 }
 
-static void add_nDPI_Data(json_object** root_object, struct NDPI_Data nDPIStructure)
+static void add_nDPI_Data(json_object** root_object, struct NDPI_Data nDPIStructure, int flowRiskIndex)
 {
-    char* nDPIJsonString = create_nDPI_Json_String(&nDPIStructure);
+    char* nDPIJsonString = create_nDPI_Json_String(&nDPIStructure, flowRiskIndex);
     if (nDPIJsonString == NULL)
     {
         fprintf(stderr, "Error parsing new ndpi JSON\n");
@@ -1133,13 +1125,13 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
     }
 }
 
-void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, size_t* createAlert)
+void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, size_t* createAlert, int flowRiskIndex)
 {
     struct NDPI_Data ndpiData = getnDPIStructure(originalJsonStr);
     *createAlert = ndpiData.flow_risk_count;
 
     json_object* root_object = json_object_new_object();
-    add_nDPI_Data(&root_object, ndpiData);
+    add_nDPI_Data(&root_object, ndpiData, flowRiskIndex);
 
     struct Root_data rootData = getRootDataStructure(originalJsonStr);
     add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count);

@@ -4,7 +4,8 @@
 extern "C" {
 #endif
 
-bool IsValidFlowForLogging(struct ndpi_flow_info* flow);
+typedef void (*LoggingFunction)(FILE*, const char*, ...);
+bool IsValidFlowForLogging(LoggingFunction logFunc, FILE* serializationLogFile, struct ndpi_flow_info* flow);
 void FreeSettingsConfigurationData();
 
 #ifdef __cplusplus

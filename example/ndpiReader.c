@@ -6626,7 +6626,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 07.30.2024-1 - This is Release configuration.\n");
+    printMessage(serializationLogFile, "nDPI Version 08.07.2024-1 - Port is an integer field.\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;

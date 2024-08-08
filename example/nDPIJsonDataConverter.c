@@ -54,9 +54,9 @@ struct Root_xfer
 struct Root_data
 {
     char* src_ip;
-    char* src_port;
+    int src_port;
     char* dest_ip;
-    char* dst_port;
+    int dst_port;
     char* l3_proto;
     char* l4_proto;
     int ip;
@@ -452,9 +452,9 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
 {
     struct Root_data result;
     result.src_ip = NULL;
-    result.src_port = NULL;
+    result.src_port = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.dest_ip = NULL;
-    result.dst_port = NULL;
+    result.dst_port = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.l3_proto = NULL;
     result.ip = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.l4_proto = NULL;
@@ -489,7 +489,7 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
     json_object* src_port;
     if (json_object_object_get_ex(root, "src_port", &src_port))
     {
-        result.src_port = _strdup(json_object_get_string(src_port));
+        result.src_port = json_object_get_int(src_port);
     }
     
 
@@ -504,7 +504,7 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
     json_object* dst_port;
     if (json_object_object_get_ex(root, "dst_port", &dst_port))
     {
-        result.dst_port = _strdup(json_object_get_string(dst_port));
+        result.dst_port = json_object_get_int(dst_port);
     }
     
     // network object
@@ -877,20 +877,20 @@ static void FreeConvertRootDataFormat(struct Root_data* rootData)
         free(rootData->src_ip);
     }
 
-    if (rootData->src_port != NULL)
-    {
-        free(rootData->src_port);
-    }
+    //if (rootData->src_port != NULL)
+    //{
+    //    free(rootData->src_port);
+    //}
 
     if (rootData->dest_ip != NULL)
     {
         free(rootData->dest_ip);
     }
 
-    if (rootData->dst_port != NULL)
-    {
-        free(rootData->dst_port);
-    }
+    //if (rootData->dst_port != NULL)
+    //{
+    //    free(rootData->dst_port);
+    //}
 
     if (rootData->l3_proto != NULL)
     {
@@ -968,9 +968,9 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         addSrc = TRUE;
     }
 
-    if (rootDataStructure.src_port != NULL)
+    if (rootDataStructure.src_port != RANDOM_UNINTIALIZED_NUMBER_VALUE)
     {
-        json_object_object_add(src_object, "port", json_object_new_string(rootDataStructure.src_port));
+        json_object_object_add(src_object, "port", json_object_new_int(rootDataStructure.src_port));
         addSrc = TRUE;
     }
 
@@ -988,9 +988,9 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         addDest = TRUE;
     }
 
-    if (rootDataStructure.dst_port != NULL)
+    if (rootDataStructure.dst_port != RANDOM_UNINTIALIZED_NUMBER_VALUE)
     {
-        json_object_object_add(dest_object, "port", json_object_new_string(rootDataStructure.dst_port));
+        json_object_object_add(dest_object, "port", json_object_new_int(rootDataStructure.dst_port));
         addDest = TRUE;
     }
 

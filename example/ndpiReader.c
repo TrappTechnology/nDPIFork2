@@ -6580,7 +6580,7 @@ static void PrintError(DWORD errorCode)
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 /**
-   @brief MAIN FUNCTION
+   @brief MAIN FUNCTION 
 **/
 int main(int argc, char** argv)
 {
@@ -6626,7 +6626,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 08.07.2024-1 - Port is an integer field.\n");
+    printMessage(serializationLogFile, "nDPI Version 08.25.2024-1 - Event fields are added back.\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;

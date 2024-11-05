@@ -508,11 +508,11 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
     }
     
     // network object
-    json_object* l3_proto;
-    if (json_object_object_get_ex(root, "l3_proto", &l3_proto))
-    {
-        result.l3_proto = _strdup(json_object_get_string(l3_proto));
-    }
+    //json_object* l3_proto;
+    //if (json_object_object_get_ex(root, "l3_proto", &l3_proto))
+    //{
+    //    result.l3_proto = _strdup(json_object_get_string(l3_proto));
+    //}
 
     json_object* ip;
     if (json_object_object_get_ex(root, "ip", &ip))
@@ -521,11 +521,13 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
     }
    
 
-    json_object* l4_proto;
-    if (json_object_object_get_ex(root, "l4_proto", &l4_proto))
-    {
-        result.l4_proto = _strdup(json_object_get_string(l4_proto));
-    }
+    // comment out l4_proto as this is never hit
+    //
+    //json_object* l4_proto;
+    //if (json_object_object_get_ex(root, "l4_proto", &l4_proto))
+    //{
+    //    result.l4_proto = _strdup(json_object_get_string(l4_proto));
+    //}
    
     json_object* proto;
     if (json_object_object_get_ex(root, "proto", &proto))
@@ -1017,15 +1019,15 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         }
     }
 
-    if (rootDataStructure.l4_proto != NULL)
-    {
-        json_object_object_add(network_object, "transport", json_object_new_string(rootDataStructure.l4_proto));
-        addNetwork = TRUE;
-    }
+    //if (rootDataStructure.l4_proto != NULL)
+    //{
+    //    json_object_object_add(network_object, "l4_proto", json_object_new_string(rootDataStructure.l4_proto));
+    //    addNetwork = TRUE;
+    //}
 
     if (rootDataStructure.proto != NULL)
     {
-        json_object_object_add(network_object, "application", json_object_new_string(rootDataStructure.proto));
+        json_object_object_add(network_object, "transport", json_object_new_string(rootDataStructure.proto));
         addNetwork = TRUE;
     }
 
@@ -1044,29 +1046,31 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
     // Event starts here
 
     json_object* event_object = json_object_new_object();
-    bool addEvent = FALSE;
 
     if (rootDataStructure.event_start != NULL)
     {
         json_object_object_add(event_object, "start", json_object_new_string(rootDataStructure.event_start));
-        addEvent = TRUE;
     }
     if (rootDataStructure.event_end != NULL)
     {
         json_object_object_add(event_object, "end", json_object_new_string(rootDataStructure.event_end));
-        addEvent = TRUE;
     }
 
     if (rootDataStructure.event_duration != NULL)
     {
         json_object_object_add(event_object, "duration", json_object_new_string(rootDataStructure.event_duration));
-        addEvent = TRUE;
     }
 
-    if (addEvent)
+    if (flowRiskCount > 0)
     {
-        json_object_object_add(*root_object, "event", event_object);
+        json_object_object_add(event_object, "kind", json_object_new_string("alert"));
     }
+    else
+    {
+        json_object_object_add(event_object, "kind", json_object_new_string("event"));
+    }
+
+    json_object_object_add(*root_object, "event", event_object);
 
     // Flow starts here
     if (rootDataStructure.flow_id != RANDOM_UNINTIALIZED_NUMBER_VALUE)
@@ -1111,18 +1115,6 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         json_object_object_add(*root_object, "url", full_object);    
     }   
 
-    if (flowRiskCount > 0)
-    {
-        json_object* event_object = json_object_new_object();
-        json_object_object_add(event_object, "kind", json_object_new_string("alert"));
-        json_object_object_add(*root_object, "event", event_object);
-    }
-    else
-    {
-		json_object* event_object = json_object_new_object();
-		json_object_object_add(event_object, "kind", json_object_new_string("event"));
-		json_object_object_add(*root_object, "event", event_object);        
-    }
 }
 
 void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, size_t* createAlert, int flowRiskIndex)

@@ -65,7 +65,7 @@ struct Root_data
     int flow_id;
     char* event_start;
     char* event_end;
-    char* event_duration;
+    unsigned long event_duration;
     struct Root_xfer xfer;
     char* hostname;
 };
@@ -578,7 +578,7 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
         json_object* event_duration;
         if (json_object_object_get_ex(event_object, "duration", &event_duration))
         {
-            result.event_duration = _strdup(json_object_get_string(event_duration));
+            result.event_duration = json_object_get_int(event_duration);
         }
     }
 
@@ -741,11 +741,6 @@ static char* create_nDPI_Json_String(const struct NDPI_Data* ndpi, int flowRiskI
     if (ndpi->proto_id != NULL)
     {
         json_object_object_add(ndpiObj, "proto_id", json_object_new_string(ndpi->proto_id));
-    }
-
-    if (ndpi->proto_by_ip != NULL)
-    {
-        json_object_object_add(ndpiObj, "proto_by_ip", json_object_new_string(ndpi->proto_by_ip) );
     }
 
     if (ndpi->proto_by_ip_id != RANDOM_UNINTIALIZED_NUMBER_VALUE)
@@ -925,16 +920,15 @@ static void FreeConvertRootDataFormat(struct Root_data* rootData)
         free(rootData->event_end);
     }
 
-    if (rootData->event_duration != NULL)
-    {
-        free(rootData->event_duration);
-    }
+    //if (rootData->event_duration != NULL)
+    //{
+    //    free(rootData->event_duration);
+    //}
 
     if (rootData->hostname != NULL)
     {
         free(rootData->hostname);
     }
-
 }
 
 static void add_nDPI_Data(json_object** root_object, struct NDPI_Data nDPIStructure, int flowRiskIndex)
@@ -959,7 +953,7 @@ static void add_nDPI_Data(json_object** root_object, struct NDPI_Data nDPIStruct
 }
 
 /*--------------------------------------------------------------------------------------------------------------------------------------*/
-static void add_Root_Data(json_object** root_object,  struct Root_data rootDataStructure, int flowRiskCount)
+static void add_Root_Data(json_object** root_object,  struct Root_data rootDataStructure, int flowRiskCount, char* proto_by_ip)
 {
     json_object* src_object = json_object_new_object();
 
@@ -1031,6 +1025,13 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         addNetwork = TRUE;
     }
 
+    if (proto_by_ip != NULL)
+    {
+        json_object_object_add(network_object, "application", json_object_new_string(proto_by_ip));
+        addNetwork = TRUE;
+    }
+
+
     if (addNetwork)
     {
         json_object_object_add(*root_object, "network", network_object);
@@ -1058,7 +1059,7 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
 
     if (rootDataStructure.event_duration != NULL)
     {
-        json_object_object_add(event_object, "duration", json_object_new_string(rootDataStructure.event_duration));
+        json_object_object_add(event_object, "duration", json_object_new_int64(rootDataStructure.event_duration));
     }
 
     if (flowRiskCount > 0)
@@ -1117,7 +1118,7 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
 
 }
 
-void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, size_t* createAlert, int flowRiskIndex)
+void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, size_t* createAlert, int flowRiskIndex, unsigned int response_status_code, char* user_agent, char* filename, char* content_type, char* request_content_type)
 {
     struct NDPI_Data ndpiData = getnDPIStructure(originalJsonStr);
     *createAlert = ndpiData.flow_risk_count;
@@ -1126,7 +1127,56 @@ void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, siz
     add_nDPI_Data(&root_object, ndpiData, flowRiskIndex);
 
     struct Root_data rootData = getRootDataStructure(originalJsonStr);
-    add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count);
+    add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count, ndpiData.proto_by_ip);
+
+    // http start
+    struct json_object* http_obj = json_object_new_object();
+    bool add = FALSE;
+    if (response_status_code != 0)
+    {
+        struct json_object* response_status_code_object = json_object_new_int(response_status_code);
+        json_object_object_add(http_obj, "response_status_code", response_status_code_object);
+        add = TRUE;
+    }
+
+    if (strlen(user_agent))
+    {
+        struct json_object* user_agent_object = json_object_new_string(user_agent);
+        json_object_object_add(http_obj, "user_agent", user_agent_object);
+        add = TRUE;
+    }
+
+    if (strlen(filename))
+    {
+        struct json_object* filename_object = json_object_new_string(filename);
+        json_object_object_add(http_obj, "filename", filename_object);
+        add = TRUE;
+    }
+
+    if (strlen(content_type))
+    {
+        struct json_object* content_type_object = json_object_new_string(content_type);
+        json_object_object_add(http_obj, "content_type", content_type_object);
+        add = TRUE;
+    }
+
+    if (strlen(request_content_type))
+    {
+        struct json_object* request_content_type_object = json_object_new_string(request_content_type);
+        json_object_object_add(http_obj, "request_content_type", request_content_type_object);
+        add = TRUE;
+    }
+
+    // Add "http" object to the parsed JSON
+    if (add)
+    {
+        json_object_object_add(root_object, "http", http_obj);
+    }
+    else
+    {
+        json_object_put(http_obj);
+    }
+    // http end
 
     *converted_json_str = _strdup(json_object_to_json_string(root_object));
 
@@ -1167,6 +1217,7 @@ void DeletenDPIRisk(char* originalJsonStr, char** converted_json_str)
     json_object_put(root);
 
 }
+
 
 
 

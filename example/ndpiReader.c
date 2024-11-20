@@ -2459,7 +2459,7 @@ static void printFlowSerialized(struct ndpi_flow_info *flow)
 
   char* converted_json_str = NULL;
   size_t flowRisksCount = 0;
-  ConvertnDPIDataFormat(json_str, &converted_json_str, &flowRisksCount, 0);
+  ConvertnDPIDataFormat(json_str, &converted_json_str, &flowRisksCount, 0, flow->http.response_status_code, flow->http.user_agent, flow->http.filename, flow->http.content_type, flow->http.request_content_type);
 
   if (converted_json_str != NULL)
   {
@@ -2484,7 +2484,8 @@ static void printFlowSerialized(struct ndpi_flow_info *flow)
               for (size_t index = 1; index < flowRisksCount; index++)
               {
                   size_t flowRisks = 0;
-                  ConvertnDPIDataFormat(json_str, &converted_json_str, &flowRisks, index);
+                  free(converted_json_str);
+                  ConvertnDPIDataFormat(json_str, &converted_json_str, &flowRisks, index, flow->http.response_status_code, flow->http.user_agent, flow->http.filename, flow->http.content_type, flow->http.request_content_type);
 
 				  char* indexedFileName = create_filename_with_index_and_flow_id(generated_json_files_alerts[currentFileIndex], index, flow->flow_id);
 				  FILE* serialization_fp_indexed = fopen(indexedFileName, "a");
@@ -6626,7 +6627,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 08.25.2024-1 - Event fields are added back.\n");
+    printMessage(serializationLogFile, "nDPI Version 11.20.2024-1 - Added http field. Moved proto_by_ip to network.\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;

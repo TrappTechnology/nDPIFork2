@@ -6627,7 +6627,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 11.20.2024-1 - Added http field. Moved proto_by_ip to network.\n");
+    printMessage(serializationLogFile, "nDPI Version 12.03.2024-1 - http.status_code field changed to http.response.status_code\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;

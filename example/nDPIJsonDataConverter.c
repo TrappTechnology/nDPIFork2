@@ -1134,8 +1134,8 @@ void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, siz
     bool add = FALSE;
     if (response_status_code != 0)
     {
-        struct json_object* response_status_code_object = json_object_new_int(response_status_code);
-        json_object_object_add(http_obj, "status_code", response_status_code_object);
+        struct json_object* status_code_object = json_object_new_int(response_status_code);
+        json_object_object_add(http_obj, "response.status_code", status_code_object);
         add = TRUE;
     }
 

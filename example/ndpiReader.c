@@ -6627,7 +6627,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 11.29.2024-1 - http.response_status_code field changed to http.status_code\n");
+    printMessage(serializationLogFile, "nDPI Version 12.03.2024-1 - http.status_code field changed to http.response.status_code\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;

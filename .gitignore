@@ -1,7 +1,6 @@
 *.o
 *.db
 *.db-*
-*.dll
 *.ilk
 *.in
 *.ipch

@@ -94,34 +94,6 @@ static char* domain_to_check = NULL;
 static char* ip_port_to_check = NULL;
 static u_int8_t ignore_vlanid = 0;
 
-
-/*--------------------------------------Ashwani start--------------------------------------------*/
-#define TRUE 1
-#define FALSE 0
-#define bool int
-
-static FILE* serializationLogFile = NULL;               // nDPIReader_Log_File.txt is created at the same location where nDPIReader.exe is placed.
-static char* pCapFilesFolderLocationPath = NULL;        // This is the full path of folder which has pCap files to process
-static char* pCapFilesSearchString = NULL;              // This pCapFilesFolderLocationPath/*.* 
-static char moduleFolderPath[1024];                     // This is the path of folder in which nDPIReader.exe resides
-static bool needToRecordRisk = false;                   // This parameters is used to determine whether <record> field needs to be logged into json log file (ALERTS/EVENTS) or not
-
-#define MAX_NUMBER_OF_FILES 1000
-#define MAX_PATH_LENGTH 512
-
-char* pcap_files[MAX_NUMBER_OF_FILES];
-char* generated_tmp_json_files_events[MAX_NUMBER_OF_FILES];
-char* generated_tmp_json_files_alerts[MAX_NUMBER_OF_FILES];
-char* generated_json_files_events[MAX_NUMBER_OF_FILES];
-char* generated_json_files_alerts[MAX_NUMBER_OF_FILES];
-int number_of_valid_files_found = 0;
-int currentFileIndex = -1;
-
-static void printMessage(FILE* serializationLogFile, const char* format, ...);
-static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...);
-/*--------------------------------------Ashwani end--------------------------------------------*/
-
-
 /** User preferences **/
 u_int8_t enable_realtime_output = 0, enable_protocol_guess = NDPI_GIVEUP_GUESS_BY_PORT | NDPI_GIVEUP_GUESS_BY_IP, enable_payload_analyzer = 0, num_bin_clusters = 0, extcap_exit = 0;
 u_int8_t verbose = 0, enable_flow_stats = 0;
@@ -302,6 +274,376 @@ FILE *trace = NULL;
 #endif
 
 /* ***************************************************** */
+
+/*==============================================================[ Ashwani start ]=================================================================================*/
+#define TRUE 1
+#define FALSE 0
+#define bool int
+
+static FILE* serializationLogFile = NULL;               // nDPIReader_Log_File.txt is created at the same location where nDPIReader.exe is placed.
+static char* pCapFilesFolderLocationPath = NULL;        // This is the full path of folder which has pCap files to process
+static char* pCapFilesSearchString = NULL;              // This pCapFilesFolderLocationPath/*.* 
+static char moduleFolderPath[1024];                     // This is the path of folder in which nDPIReader.exe resides
+static bool needToRecordRisk = false;                   // This parameters is used to determine whether <record> field needs to be logged into json log file (ALERTS/EVENTS) or not
+
+#define MAX_NUMBER_OF_FILES 1000
+#define MAX_PATH_LENGTH 512
+
+char* pcap_files[MAX_NUMBER_OF_FILES];
+char* generated_tmp_json_files_events[MAX_NUMBER_OF_FILES];
+char* generated_tmp_json_files_alerts[MAX_NUMBER_OF_FILES];
+char* generated_json_files_events[MAX_NUMBER_OF_FILES];
+char* generated_json_files_alerts[MAX_NUMBER_OF_FILES];
+int number_of_valid_files_found = 0;
+int currentFileIndex = -1;
+
+static void printMessage(FILE* serializationLogFile, const char* format, ...);
+static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...);
+
+/*-----------------------------------------------------------------------------------------------------*/
+// Ashwani:
+// This gets all the valid pcap and pcapng files located at specified pCap files location
+//
+void fetch_files_to_process()
+{
+#ifdef WIN32
+    WIN32_FIND_DATA find_data;
+    HANDLE hFind = FindFirstFile(pCapFilesSearchString, &find_data);
+
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        perror("Error opening directory");
+        return;
+    }
+
+    for (int i = 0; i < number_of_valid_files_found; i++)
+    {
+        free(generated_tmp_json_files_events[i]);
+        free(generated_tmp_json_files_alerts[i]);
+        free(generated_json_files_events[i]);
+        free(generated_json_files_alerts[i]);
+    }
+
+    number_of_valid_files_found = 0;
+
+    do
+    {
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            continue; // Skip directories
+        }
+
+        const char* filename = find_data.cFileName;
+        const char* extension_pcap = ".pcap";
+        size_t ext_length_pcap = strlen(extension_pcap);
+
+        const char* extension_pcapng = ".pcapng";
+        size_t ext_length_pcapng = strlen(extension_pcapng);
+        size_t file_length = strlen(filename);
+
+        if (file_length >= ext_length_pcap && strcmp(filename + file_length - ext_length_pcap, extension_pcap) == 0 ||
+            file_length >= ext_length_pcapng && strcmp(filename + file_length - ext_length_pcapng, extension_pcapng) == 0)
+        {
+            char* pcapFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (pcapFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(pcapFileFullPath, "%s\\%s", pCapFilesFolderLocationPath, filename);
+
+            char* dot = strrchr(filename, '.');
+            if (dot != NULL)
+            {
+                *dot = '\0'; // Replace the dot with the null terminator
+            }
+
+            char* eventJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (eventJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            pcap_files[number_of_valid_files_found] = pcapFileFullPath;
+
+            sprintf(eventJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Events", filename, "json");
+            generated_json_files_events[number_of_valid_files_found] = eventJsonFileFullPath;
+
+            char* eventTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (eventTmpJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(eventTmpJsonFileFullPath, "%s.%s", eventJsonFileFullPath, "tmp");
+            generated_tmp_json_files_events[number_of_valid_files_found] = eventTmpJsonFileFullPath;
+
+            char* alertJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (alertJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                free(eventTmpJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(alertJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Alerts", filename, "json");
+            generated_json_files_alerts[number_of_valid_files_found] = alertJsonFileFullPath;
+
+            char* alertTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (alertTmpJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                free(eventTmpJsonFileFullPath); // Free previously allocated memory
+                free(alertJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(alertTmpJsonFileFullPath, "%s.%s", alertJsonFileFullPath, "tmp");
+            generated_tmp_json_files_alerts[number_of_valid_files_found] = alertTmpJsonFileFullPath;
+
+            number_of_valid_files_found++;
+
+            if (number_of_valid_files_found >= MAX_NUMBER_OF_FILES)
+            {
+                printMessage(serializationLogFile, "ERROR: Maximum number of files reached (%d), some files may be omitted.\n", MAX_NUMBER_OF_FILES);
+                break;
+            }
+        }
+    } while (FindNextFile(hFind, &find_data) != 0);
+
+    FindClose(hFind);
+#endif
+}
+
+
+/*-----------------------------------------------------------------------------------------------------*/
+// Ashwani:
+// This gets all the valid pcap and pcapng files and also set options like where data should be recorded.
+//
+static void fetch_files_to_process_and_set_default_options()
+{
+    printDetailedLoggingMessage(NULL, "Start fetch_files_to_process_and_set_default_options()\n");
+    do
+    {
+        fetch_files_to_process();
+
+        if (number_of_valid_files_found == 0)
+        {
+            printMessage(serializationLogFile, "No file to process. Sleeping for 15 seconds\n");
+            sleep(15);
+        }
+    } while (number_of_valid_files_found == 0);
+
+    // Print the full paths of the .pcap files
+    printMessage(serializationLogFile, "\nTotal number of pcap/pcapng files found = %d\n\n", number_of_valid_files_found);
+
+    int length_of_longest_file = 0;
+    int index = 0;
+    for (index = 0; index < number_of_valid_files_found; index++)
+    {
+        int length = strlen(pcap_files[index]);
+        if (length > length_of_longest_file)
+        {
+            length_of_longest_file = length;
+        }
+    }
+
+    index = 0;
+    for (index = 0; index < number_of_valid_files_found; index++)
+    {
+        printMessage(serializationLogFile, "%3d.  %-*s| %-*s\n", index, length_of_longest_file + 10, pcap_files[index], length_of_longest_file, generated_tmp_json_files_events[index]);
+    }
+
+    verbose = 2;
+    quiet_mode = 1;
+
+    printDetailedLoggingMessage(NULL, "End fetch_files_to_process_and_set_default_options()\n");
+}
+
+/*-----------------------------------------------------------------------------------------------------*/
+
+// Ashwani
+// Added this routine to get the full path of DPIReader program.
+//
+static void getExecutablePath(char* buffer, size_t size)
+{
+#ifdef _WIN32
+    GetModuleFileName(NULL, buffer, size);
+#elif defined(__linux__) || defined(__APPLE__)
+    ssize_t len = readlink("/proc/self/exe", buffer, size - 1);
+    if (len != -1) {
+        buffer[len] = '\0';
+    }
+#endif
+}
+
+// Ashwani
+// Added this routine to get the full path of folder in which DPIReader program is running
+//
+static void getParentFolderPathOfExecutable(char* buffer, size_t size)
+{
+    printDetailedLoggingMessage(NULL, "\tInside getParentFolderPathOfExecutable()\n");
+    GetModuleFileName(NULL, buffer, size);
+    char* lastBackslash = strrchr(buffer, '\\');
+    if (lastBackslash != NULL)
+    {
+        *lastBackslash = '\0'; // Remove the executable name       
+    }
+
+    printDetailedLoggingMessage(NULL, "\tEnd of getParentFolderPathOfExecutable()\n");
+}
+
+
+// Ashwani
+// Return true if file is empty else returns false.
+//
+static int isFileEmpty(FILE* file)
+{
+    // Save the current position in the file
+    long currentPosition = ftell(file);
+
+    // Move the file pointer to the end of the file
+    fseek(file, 0, SEEK_END);
+
+    // Get the current position, which now represents the size of the file
+    long size = ftell(file);
+
+    // Restore the file pointer to the original position
+    fseek(file, currentPosition, SEEK_SET);
+
+    // Check if the file is empty
+    return size == 0;
+}
+
+static int isDetailedLoggingTurnedON()
+{
+    const char* env_var = "NDPI_LOGGING_ON";
+    static int value_initialized = 0;
+    static int is_logging_on = 0;
+
+    if (!value_initialized) {
+        char* value = getenv(env_var);
+        is_logging_on = value ? 1 : 0;
+        value_initialized = 1;
+    }
+
+    return is_logging_on;
+}
+
+static void printMessage(FILE* serializationLogFile, const char* format, ...)
+{
+    va_list args;
+
+    // Print to log file
+    if (serializationLogFile != NULL)
+    {
+        va_start(args, format);
+        vfprintf(serializationLogFile, format, args);
+        va_end(args);
+        fprintf(serializationLogFile, "\n");
+    }
+
+    // Print to console
+#ifdef _WIN32
+    if (_isatty(_fileno(stdin))) {
+        if (_isatty(_fileno(stdout))) {
+            va_start(args, format);
+            vprintf(format, args);
+            va_end(args);
+            printf("\n");
+        }
+    }
+#endif
+}
+
+static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...)
+{
+    if (isDetailedLoggingTurnedON())
+    {
+        va_list args;
+        va_start(args, format);
+        printMessage(serializationLogFile, format, args);
+        va_end(args);
+    }
+}
+
+static void renameCurrentTempFile()
+{
+    serialization_fp = fopen(generated_tmp_json_files_events[currentFileIndex], "r");
+    if (serialization_fp != NULL)
+    {
+        fclose(serialization_fp);
+        if (rename(generated_tmp_json_files_events[currentFileIndex], generated_json_files_events[currentFileIndex]) != 0)
+        {
+            printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[currentFileIndex]);
+            remove(generated_json_files_events[currentFileIndex]);
+            printMessage(serializationLogFile, "deleted existing file - %s \n", generated_json_files_events[currentFileIndex]);
+
+            if (rename(generated_tmp_json_files_events[currentFileIndex], generated_json_files_events[currentFileIndex]) != 0)
+            {
+                printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[currentFileIndex]);
+            }
+        }
+
+        serialization_fp = fopen(generated_tmp_json_files_alerts[currentFileIndex], "r");
+        if (serialization_fp != NULL)
+        {
+            fclose(serialization_fp);
+            if (rename(generated_tmp_json_files_alerts[currentFileIndex], generated_json_files_alerts[currentFileIndex]) != 0)
+            {
+                printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[currentFileIndex]);
+                remove(generated_json_files_alerts[currentFileIndex]);
+                printMessage(serializationLogFile, "deleted existing file - %s \n", generated_json_files_alerts[currentFileIndex]);
+
+                if (rename(generated_tmp_json_files_alerts[currentFileIndex], generated_json_files_alerts[currentFileIndex]) != 0)
+                {
+                    printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[currentFileIndex]);
+                }
+            }
+        }
+    }
+}
+
+static void PrintError(DWORD errorCode)
+{
+    LPVOID errorMessage;
+
+    // Format the error message
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        errorCode,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPWSTR)&errorMessage,
+        0,
+        NULL
+    );
+
+    // Print the error message
+    printMessage(serializationLogFile, "ERROR: %s\n", errorMessage);
+
+
+    // Free the buffer allocated by FormatMessage
+    LocalFree(errorMessage);
+}
+
+/*==============================================================[ Ashwani start ]=================================================================================*/
+
 
 static u_int32_t reader_slot_malloc_bins(u_int64_t v)
 {
@@ -634,12 +976,11 @@ static void help(u_int long_help) {
          "[-f <filter>][-s <duration>][-m <duration>][-b <num bin clusters>]\n"
          "          [-p <protos>][-l <loops> [-q][-d][-h][-H][-D][-e <len>][-E][-t][-v <level>]\n"
          "          [-n <threads>][-w <file>][-c <file>][-C <file>][-j <file>][-x <file>]\n"
-         "          [-r <file>][-R][-j <file>][-S <file>][-T <num>][-U <num>] [-x <domain>]\n"
+         "          [-r <file>][-R][-j <file>][-S <file>][-T <num>][-U <num>] [-x <domain>] [-Z <folder path>]\n"
          "          [-a <mode>][-B proto_list]\n\n"
          "Usage:\n"
          "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
-         "                            | device for live capture (comma-separated list)\n"
-         "  -L <pcap files location>  | Specify folder full path where pcap files are stores for processing\n" // Ashwani: location of pcap files (Example: "C:\Ashwani\misc\nDPI\Testing\pCapFiles")
+         "                            | device for live capture (comma-separated list)\n"        
          "  -f <BPF filter>           | Specify a BPF filter for filtering selected traffic\n"
          "  -s <duration>             | Maximum capture duration in seconds (live traffic capture only)\n"
          "  -m <duration>             | Split analysis duration in <duration> max seconds\n"
@@ -701,8 +1042,9 @@ static void help(u_int long_help) {
          "  -I                        | Ignore VLAN id for flow hash calculation\n"
          "  -A                        | Dump internal statistics (LRU caches / Patricia trees / Ahocarasick automas / ...\n"
          "  -M                        | Memory allocation stats on data-path (only by the library).\n"
-	 "                            | It works only on single-thread configuration\n"
+	     "                            | It works only on single-thread configuration\n"
          "  --cfg=proto,param,value   | Configure the specific attribute of this protocol\n"
+         "  -Z <pcap files location>  | Specify folder full path where pcap files are stores for processing\n" // Ashwani: location of pcap files (Example: "C:\Ashwani\misc\nDPI\Testing\pCapFiles")
          ,
          human_readeable_string_len,
          min_pattern_len, max_pattern_len, max_num_packets_per_flow, max_packet_payload_dissection,
@@ -1055,182 +1397,6 @@ int reader_add_cfg(char *proto, char *param, char *value, int dup)
   return 0;
 }
 
-/*-----------------------------------------------------------------------------------------------------*/
-// Ashwani:
-// This gets all the valid pcap and pcapng files located at specified pCap files location
-//
-void fetch_files_to_process()
-{
-#ifdef WIN32
-    WIN32_FIND_DATA find_data;
-    HANDLE hFind = FindFirstFile(pCapFilesSearchString, &find_data);
-
-    if (hFind == INVALID_HANDLE_VALUE)
-    {
-        perror("Error opening directory");
-        return;
-    }
-
-    for (int i = 0; i < number_of_valid_files_found; i++)
-    {
-        free(generated_tmp_json_files_events[i]);
-        free(generated_tmp_json_files_alerts[i]);
-        free(generated_json_files_events[i]);
-        free(generated_json_files_alerts[i]);
-    }
-
-    number_of_valid_files_found = 0;
-
-    do
-    {
-        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        {
-            continue; // Skip directories
-        }
-
-        const char* filename = find_data.cFileName;
-        const char* extension_pcap = ".pcap";
-        size_t ext_length_pcap = strlen(extension_pcap);
-
-        const char* extension_pcapng = ".pcapng";
-        size_t ext_length_pcapng = strlen(extension_pcapng);
-        size_t file_length = strlen(filename);
-
-        if (file_length >= ext_length_pcap && strcmp(filename + file_length - ext_length_pcap, extension_pcap) == 0 ||
-            file_length >= ext_length_pcapng && strcmp(filename + file_length - ext_length_pcapng, extension_pcapng) == 0)
-        {
-            char* pcapFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-            if (pcapFileFullPath == NULL)
-            {
-                perror("Memory allocation error");
-                FindClose(hFind);
-                return;
-            }
-
-            sprintf(pcapFileFullPath, "%s\\%s", pCapFilesFolderLocationPath, filename);
-
-            char* dot = strrchr(filename, '.');
-            if (dot != NULL)
-            {
-                *dot = '\0'; // Replace the dot with the null terminator
-            }
-
-            char* eventJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-            if (eventJsonFileFullPath == NULL)
-            {
-                perror("Memory allocation error");
-                free(pcapFileFullPath); // Free previously allocated memory
-                FindClose(hFind);
-                return;
-            }
-
-            pcap_files[number_of_valid_files_found] = pcapFileFullPath;
-
-            sprintf(eventJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Events", filename, "json");
-            generated_json_files_events[number_of_valid_files_found] = eventJsonFileFullPath;
-
-            char* eventTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-            if (eventTmpJsonFileFullPath == NULL)
-            {
-                perror("Memory allocation error");
-                free(pcapFileFullPath); // Free previously allocated memory
-                free(eventJsonFileFullPath); // Free previously allocated memory
-                FindClose(hFind);
-                return;
-            }
-
-            sprintf(eventTmpJsonFileFullPath, "%s.%s", eventJsonFileFullPath, "tmp");
-            generated_tmp_json_files_events[number_of_valid_files_found] = eventTmpJsonFileFullPath;
-
-            char* alertJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-            if (alertJsonFileFullPath == NULL)
-            {
-                perror("Memory allocation error");
-                free(pcapFileFullPath); // Free previously allocated memory
-                free(eventJsonFileFullPath); // Free previously allocated memory
-                free(eventTmpJsonFileFullPath); // Free previously allocated memory
-                FindClose(hFind);
-                return;
-            }
-
-            sprintf(alertJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Alerts", filename, "json");
-            generated_json_files_alerts[number_of_valid_files_found] = alertJsonFileFullPath;
-
-            char* alertTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
-            if (alertTmpJsonFileFullPath == NULL)
-            {
-                perror("Memory allocation error");
-                free(pcapFileFullPath); // Free previously allocated memory
-                free(eventJsonFileFullPath); // Free previously allocated memory
-                free(eventTmpJsonFileFullPath); // Free previously allocated memory
-                free(alertJsonFileFullPath); // Free previously allocated memory
-                FindClose(hFind);
-                return;
-            }
-
-            sprintf(alertTmpJsonFileFullPath, "%s.%s", alertJsonFileFullPath, "tmp");
-            generated_tmp_json_files_alerts[number_of_valid_files_found] = alertTmpJsonFileFullPath;
-
-            number_of_valid_files_found++;
-
-            if (number_of_valid_files_found >= MAX_NUMBER_OF_FILES)
-            {
-                printMessage(serializationLogFile, "ERROR: Maximum number of files reached (%d), some files may be omitted.\n", MAX_NUMBER_OF_FILES);
-                break;
-            }
-        }
-    } while (FindNextFile(hFind, &find_data) != 0);
-
-    FindClose(hFind);
-#endif
-}
-
-
-/*-----------------------------------------------------------------------------------------------------*/
-// Ashwani:
-// This gets all the valid pcap and pcapng files and also set options like where data should be recorded.
-//
-static void fetch_files_to_process_and_set_default_options()
-{
-    printDetailedLoggingMessage(NULL, "Start fetch_files_to_process_and_set_default_options()\n");
-    do
-    {
-        fetch_files_to_process();
-
-        if (number_of_valid_files_found == 0)
-        {
-            printMessage(serializationLogFile, "No file to process. Sleeping for 15 seconds\n");
-            sleep(15);
-        }
-    } while (number_of_valid_files_found == 0);
-
-    // Print the full paths of the .pcap files
-    printMessage(serializationLogFile, "\nTotal number of pcap/pcapng files found = %d\n\n", number_of_valid_files_found);
-
-    int length_of_longest_file = 0;
-    int index = 0;
-    for (index = 0; index < number_of_valid_files_found; index++)
-    {
-        int length = strlen(pcap_files[index]);
-        if (length > length_of_longest_file)
-        {
-            length_of_longest_file = length;
-        }
-    }
-
-    index = 0;
-    for (index = 0; index < number_of_valid_files_found; index++)
-    {
-        printMessage(serializationLogFile, "%3d.  %-*s| %-*s\n", index, length_of_longest_file + 10, pcap_files[index], length_of_longest_file, generated_tmp_json_files_events[index]);
-    }
-
-    verbose = 2;
-    quiet_mode = 1;
-
-    printDetailedLoggingMessage(NULL, "End fetch_files_to_process_and_set_default_options()\n");
-}
-
-/*-----------------------------------------------------------------------------------------------------*/
 
 /**
  * @brief Option parser
@@ -1262,7 +1428,7 @@ static void parseOptions(int argc, char **argv) {
 #endif
 
   while((opt = getopt_long(argc, argv,
-			   "a:Ab:B:e:c:C:dDFf:g:G:i:Ij:k:K:S:hHp:pP:l:L:r:Rs:tu:v:V:n:rp:x:X:w:q0123:456:7:89:m:MT:U:",
+      "a:Ab:B:e:c:C:dDFf:g:G:i:Ij:k:K:S:hHp:pP:l:r:Rs:tu:v:V:n:rp:x:X:w:q0123:456:7:89:m:MT:U:Z:",
                            longopts, &option_idx)) != EOF) {
 #ifdef DEBUG_TRACE
     if(trace) fprintf(trace, " #### Handling option -%c [%s] #### \n", opt, optarg ? optarg : "");
@@ -1340,7 +1506,7 @@ static void parseOptions(int argc, char **argv) {
       num_loops = atoi(optarg);
       break;
 
-    case 'L':
+    case 'Z':
         pCapFilesFolderLocationPath = optarg; // Ashwani: This is folder path of pcap/pcapng files
         break;
 
@@ -6353,116 +6519,6 @@ void domainSearchUnitTest2() {
 }
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-// Ashwani
-// Added this routine to get the full path of DPIReader program.
-//
-static void getExecutablePath(char* buffer, size_t size)
-{
-#ifdef _WIN32
-    GetModuleFileName(NULL, buffer, size);
-#elif defined(__linux__) || defined(__APPLE__)
-    ssize_t len = readlink("/proc/self/exe", buffer, size - 1);
-    if (len != -1) {
-        buffer[len] = '\0';
-    }
-#endif
-}
-
-/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-// Ashwani
-// Added this routine to get the full path of folder in which DPIReader program is running
-//
-static void getParentFolderPathOfExecutable(char* buffer, size_t size)
-{
-    printDetailedLoggingMessage(NULL, "\tInside getParentFolderPathOfExecutable()\n");
-    GetModuleFileName(NULL, buffer, size);
-    char* lastBackslash = strrchr(buffer, '\\');
-    if (lastBackslash != NULL) 
-    {
-        *lastBackslash = '\0'; // Remove the executable name       
-    }
-
-    printDetailedLoggingMessage(NULL, "\tEnd of getParentFolderPathOfExecutable()\n");
-}
-
-/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-// Ashwani
-// Return true if file is empty else returns false.
-//
-static int isFileEmpty(FILE* file)
-{
-    // Save the current position in the file
-    long currentPosition = ftell(file);
-
-    // Move the file pointer to the end of the file
-    fseek(file, 0, SEEK_END);
-
-    // Get the current position, which now represents the size of the file
-    long size = ftell(file);
-
-    // Restore the file pointer to the original position
-    fseek(file, currentPosition, SEEK_SET);
-
-    // Check if the file is empty
-    return size == 0;
-}
-
-/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-static int isDetailedLoggingTurnedON()
-{
-    const char* env_var = "NDPI_LOGGING_ON";
-    static int value_initialized = 0;
-    static int is_logging_on = 0;
-
-    if (!value_initialized) {
-        char* value = getenv(env_var);
-        is_logging_on = value ? 1 : 0;
-        value_initialized = 1;
-    }
-
-    return is_logging_on;
-}
-
-/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-static void printMessage(FILE* serializationLogFile, const char* format, ...) 
-{
-    va_list args;
-
-    // Print to log file
-    if (serializationLogFile != NULL)
-    {
-        va_start(args, format);
-        vfprintf(serializationLogFile, format, args);
-        va_end(args);
-        fprintf(serializationLogFile, "\n");
-    }
-     
-    // Print to console
-#ifdef _WIN32
-    if (_isatty(_fileno(stdin))) {
-        if (_isatty(_fileno(stdout))) {
-            va_start(args, format);
-            vprintf(format, args);
-            va_end(args);
-            printf("\n");
-        }
-    }
-#endif
-}
-
-/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...)
-{
-    if (isDetailedLoggingTurnedON())
-    {
-        va_list args;
-        va_start(args, format);
-        printMessage(serializationLogFile, format, args);
-        va_end(args);
-    }
-}
-
-/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 static void runTests()
 {
     int skipUnitTests = true;
@@ -6519,65 +6575,7 @@ static void runTests()
 }
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
-static void renameCurrentTempFile()
-{
-    serialization_fp = fopen(generated_tmp_json_files_events[currentFileIndex], "r");
-    if (serialization_fp != NULL)
-    {
-        fclose(serialization_fp);
-        if (rename(generated_tmp_json_files_events[currentFileIndex], generated_json_files_events[currentFileIndex]) != 0)
-        {
-            printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[currentFileIndex]);
-            remove(generated_json_files_events[currentFileIndex]);
-            printMessage(serializationLogFile, "deleted existing file - %s \n", generated_json_files_events[currentFileIndex]);
 
-            if (rename(generated_tmp_json_files_events[currentFileIndex], generated_json_files_events[currentFileIndex]) != 0)
-            {
-                printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[currentFileIndex]);
-            }
-        }
-
-        serialization_fp = fopen(generated_tmp_json_files_alerts[currentFileIndex], "r");
-        if (serialization_fp != NULL)
-        {
-            fclose(serialization_fp);
-            if (rename(generated_tmp_json_files_alerts[currentFileIndex], generated_json_files_alerts[currentFileIndex]) != 0)
-            {
-                printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[currentFileIndex]);
-                remove(generated_json_files_alerts[currentFileIndex]);
-                printMessage(serializationLogFile, "deleted existing file - %s \n", generated_json_files_alerts[currentFileIndex]);
-
-                if (rename(generated_tmp_json_files_alerts[currentFileIndex], generated_json_files_alerts[currentFileIndex]) != 0)
-                {
-                    printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[currentFileIndex]);
-                }
-            }
-        }
-    }
-}
-
-static void PrintError(DWORD errorCode) 
-{
-    LPVOID errorMessage;
-
-    // Format the error message
-    FormatMessage(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        errorCode,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (LPWSTR)&errorMessage,
-        0,
-        NULL
-    );
-
-    // Print the error message
-    printMessage(serializationLogFile, "ERROR: %s\n", errorMessage);
-  
-
-    // Free the buffer allocated by FormatMessage
-    LocalFree(errorMessage);
-}
 
 /* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 /**
@@ -6627,7 +6625,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 12.03.2024-1 - http.status_code field changed to http.response.status_code\n");
+    printMessage(serializationLogFile, "nDPI Version 01.26.2025-1 - Rearrange code for upgrade to  ndpi 4.12 version\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
   
     int i = 1;

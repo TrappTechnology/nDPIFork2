@@ -28,6 +28,7 @@
 #include "../src/lib/third_party/include/uthash.h"
 #include "../src/lib/third_party/include/ahocorasick.h"
 
+#include "ReadJsonConfiguration.h" // Ashwani
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -60,6 +61,7 @@
 #include <libgen.h>
 #endif
 #include <errno.h>
+#include <inttypes.h> // Ashwani
 
 #include "reader_util.h"
 
@@ -312,6 +314,678 @@ FILE *trace = NULL;
 #endif
 
 /* ***************************************************** */
+static void init_doh_bins();
+static void ndpiCheckHostStringMatch(char* testChar);
+static void ndpiCheckIPMatch(char* testChar);
+static void help(u_int long_help);
+static void parseOptions(int argc, char** argv);
+
+/*==============================================================[ Ashwani start ]=================================================================================*/
+#define TRUE 1
+#define FALSE 0
+#define bool int
+
+static FILE* serializationLogFile = NULL;               // nDPIReader_Log_File.txt is created at the same location where nDPIReader.exe is placed.
+static char* pCapFilesFolderLocationPath = NULL;        // This is the full path of folder which has pCap files to process
+static char* pCapFilesSearchString = NULL;              // This pCapFilesFolderLocationPath/*.* 
+static char moduleFolderPath[1024];                     // This is the path of folder in which nDPIReader.exe resides
+static bool needToRecordRisk = false;                   // This parameters is used to determine whether <record> field needs to be logged into json log file (ALERTS/EVENTS) or not
+
+#define MAX_NUMBER_OF_FILES 1000
+#define MAX_PATH_LENGTH 512
+
+char* pcap_files[MAX_NUMBER_OF_FILES];
+char* generated_tmp_json_files_events[MAX_NUMBER_OF_FILES];
+char* generated_tmp_json_files_alerts[MAX_NUMBER_OF_FILES];
+char* generated_json_files_events[MAX_NUMBER_OF_FILES];
+char* generated_json_files_alerts[MAX_NUMBER_OF_FILES];
+int number_of_valid_files_found = 0;
+int currentFileIndex = -1;
+
+static void printMessage(FILE* serializationLogFile, const char* format, ...);
+static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...);
+
+/*-----------------------------------------------------------------------------------------------------*/
+// Ashwani:
+// This gets all the valid pcap and pcapng files located at specified pCap files location
+//
+void fetch_files_to_process()
+{
+#ifdef WIN32
+    WIN32_FIND_DATA find_data;
+    HANDLE hFind = FindFirstFile(pCapFilesSearchString, &find_data);
+
+    if (hFind == INVALID_HANDLE_VALUE)
+    {
+        perror("Error opening directory");
+        return;
+    }
+
+    for (int i = 0; i < number_of_valid_files_found; i++)
+    {
+        free(generated_tmp_json_files_events[i]);
+        free(generated_tmp_json_files_alerts[i]);
+        free(generated_json_files_events[i]);
+        free(generated_json_files_alerts[i]);
+    }
+
+    number_of_valid_files_found = 0;
+
+    do
+    {
+        if (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        {
+            continue; // Skip directories
+        }
+
+        const char* filename = find_data.cFileName;
+        const char* extension_pcap = ".pcap";
+        size_t ext_length_pcap = strlen(extension_pcap);
+
+        const char* extension_pcapng = ".pcapng";
+        size_t ext_length_pcapng = strlen(extension_pcapng);
+        size_t file_length = strlen(filename);
+
+        if (file_length >= ext_length_pcap && strcmp(filename + file_length - ext_length_pcap, extension_pcap) == 0 ||
+            file_length >= ext_length_pcapng && strcmp(filename + file_length - ext_length_pcapng, extension_pcapng) == 0)
+        {
+            char* pcapFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (pcapFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(pcapFileFullPath, "%s\\%s", pCapFilesFolderLocationPath, filename);
+
+            char* dot = strrchr(filename, '.');
+            if (dot != NULL)
+            {
+                *dot = '\0'; // Replace the dot with the null terminator
+            }
+
+            char* eventJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (eventJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            pcap_files[number_of_valid_files_found] = pcapFileFullPath;
+
+            sprintf(eventJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Events", filename, "json");
+            generated_json_files_events[number_of_valid_files_found] = eventJsonFileFullPath;
+
+            char* eventTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (eventTmpJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(eventTmpJsonFileFullPath, "%s.%s", eventJsonFileFullPath, "tmp");
+            generated_tmp_json_files_events[number_of_valid_files_found] = eventTmpJsonFileFullPath;
+
+            char* alertJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (alertJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                free(eventTmpJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(alertJsonFileFullPath, "%s\\%s\\%s.%s", moduleFolderPath, "Alerts", filename, "json");
+            generated_json_files_alerts[number_of_valid_files_found] = alertJsonFileFullPath;
+
+            char* alertTmpJsonFileFullPath = (char*)malloc(MAX_PATH_LENGTH);
+            if (alertTmpJsonFileFullPath == NULL)
+            {
+                perror("Memory allocation error");
+                free(pcapFileFullPath); // Free previously allocated memory
+                free(eventJsonFileFullPath); // Free previously allocated memory
+                free(eventTmpJsonFileFullPath); // Free previously allocated memory
+                free(alertJsonFileFullPath); // Free previously allocated memory
+                FindClose(hFind);
+                return;
+            }
+
+            sprintf(alertTmpJsonFileFullPath, "%s.%s", alertJsonFileFullPath, "tmp");
+            generated_tmp_json_files_alerts[number_of_valid_files_found] = alertTmpJsonFileFullPath;
+
+            number_of_valid_files_found++;
+
+            if (number_of_valid_files_found >= MAX_NUMBER_OF_FILES)
+            {
+                printMessage(serializationLogFile, "ERROR: Maximum number of files reached (%d), some files may be omitted.\n", MAX_NUMBER_OF_FILES);
+                break;
+            }
+        }
+    } while (FindNextFile(hFind, &find_data) != 0);
+
+    FindClose(hFind);
+#endif
+}
+
+
+/*-----------------------------------------------------------------------------------------------------*/
+// Ashwani:
+// This gets all the valid pcap and pcapng files and also set options like where data should be recorded.
+//
+static void fetch_files_to_process_and_set_default_options()
+{
+    printDetailedLoggingMessage(NULL, "Start fetch_files_to_process_and_set_default_options()\n");
+    do
+    {
+        fetch_files_to_process();
+
+        if (number_of_valid_files_found == 0)
+        {
+            printMessage(serializationLogFile, "No file to process. Sleeping for 15 seconds\n");
+            sleep(15);
+        }
+    } while (number_of_valid_files_found == 0);
+
+    // Print the full paths of the .pcap files
+    printMessage(serializationLogFile, "\nTotal number of pcap/pcapng files found = %d\n\n", number_of_valid_files_found);
+
+    int length_of_longest_file = 0;
+    int index = 0;
+    for (index = 0; index < number_of_valid_files_found; index++)
+    {
+        int length = strlen(pcap_files[index]);
+        if (length > length_of_longest_file)
+        {
+            length_of_longest_file = length;
+        }
+    }
+
+    index = 0;
+    for (index = 0; index < number_of_valid_files_found; index++)
+    {
+        printMessage(serializationLogFile, "%3d.  %-*s| %-*s\n", index, length_of_longest_file + 10, pcap_files[index], length_of_longest_file, generated_tmp_json_files_events[index]);
+    }
+
+    verbose = 2;
+    quiet_mode = 1;
+
+    printDetailedLoggingMessage(NULL, "End fetch_files_to_process_and_set_default_options()\n");
+}
+
+/*-----------------------------------------------------------------------------------------------------*/
+
+// Ashwani
+// Added this routine to get the full path of DPIReader program.
+//
+static void getExecutablePath(char* buffer, size_t size)
+{
+#ifdef _WIN32
+    GetModuleFileName(NULL, buffer, size);
+#elif defined(__linux__) || defined(__APPLE__)
+    ssize_t len = readlink("/proc/self/exe", buffer, size - 1);
+    if (len != -1) {
+        buffer[len] = '\0';
+    }
+#endif
+}
+
+// Ashwani
+// Added this routine to get the full path of folder in which DPIReader program is running
+//
+static void getParentFolderPathOfExecutable(char* buffer, size_t size)
+{
+    printDetailedLoggingMessage(NULL, "\tInside getParentFolderPathOfExecutable()\n");
+    GetModuleFileName(NULL, buffer, size);
+    char* lastBackslash = strrchr(buffer, '\\');
+    if (lastBackslash != NULL)
+    {
+        *lastBackslash = '\0'; // Remove the executable name       
+    }
+
+    printDetailedLoggingMessage(NULL, "\tEnd of getParentFolderPathOfExecutable()\n");
+}
+
+
+// Ashwani
+// Return true if file is empty else returns false.
+//
+static int isFileEmpty(FILE* file)
+{
+    // Save the current position in the file
+    long currentPosition = ftell(file);
+
+    // Move the file pointer to the end of the file
+    fseek(file, 0, SEEK_END);
+
+    // Get the current position, which now represents the size of the file
+    long size = ftell(file);
+
+    // Restore the file pointer to the original position
+    fseek(file, currentPosition, SEEK_SET);
+
+    // Check if the file is empty
+    return size == 0;
+}
+
+static int isDetailedLoggingTurnedON()
+{
+    const char* env_var = "NDPI_LOGGING_ON";
+    static int value_initialized = 0;
+    static int is_logging_on = 0;
+
+    if (!value_initialized) {
+        char* value = getenv(env_var);
+        is_logging_on = value ? 1 : 0;
+        value_initialized = 1;
+    }
+
+    return is_logging_on;
+}
+
+static void printMessage(FILE* serializationLogFile, const char* format, ...)
+{
+    va_list args;
+
+    // Print to log file
+    if (serializationLogFile != NULL)
+    {
+        va_start(args, format);
+        vfprintf(serializationLogFile, format, args);
+        va_end(args);
+        fprintf(serializationLogFile, "\n");
+    }
+
+    // Print to console
+#ifdef _WIN32
+    if (_isatty(_fileno(stdin))) {
+        if (_isatty(_fileno(stdout))) {
+            va_start(args, format);
+            vprintf(format, args);
+            va_end(args);
+            printf("\n");
+        }
+    }
+#endif
+}
+
+static void printDetailedLoggingMessage(FILE* serializationLogFile, const char* format, ...)
+{
+    if (isDetailedLoggingTurnedON())
+    {
+        va_list args;
+        va_start(args, format);
+        printMessage(serializationLogFile, format, args);
+        va_end(args);
+    }
+}
+
+static void renameCurrentTempFile()
+{
+    serialization_fp = fopen(generated_tmp_json_files_events[currentFileIndex], "r");
+    if (serialization_fp != NULL)
+    {
+        fclose(serialization_fp);
+        if (rename(generated_tmp_json_files_events[currentFileIndex], generated_json_files_events[currentFileIndex]) != 0)
+        {
+            printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[currentFileIndex]);
+            remove(generated_json_files_events[currentFileIndex]);
+            printMessage(serializationLogFile, "deleted existing file - %s \n", generated_json_files_events[currentFileIndex]);
+
+            if (rename(generated_tmp_json_files_events[currentFileIndex], generated_json_files_events[currentFileIndex]) != 0)
+            {
+                printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_events[currentFileIndex]);
+            }
+        }
+
+        serialization_fp = fopen(generated_tmp_json_files_alerts[currentFileIndex], "r");
+        if (serialization_fp != NULL)
+        {
+            fclose(serialization_fp);
+            if (rename(generated_tmp_json_files_alerts[currentFileIndex], generated_json_files_alerts[currentFileIndex]) != 0)
+            {
+                printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[currentFileIndex]);
+                remove(generated_json_files_alerts[currentFileIndex]);
+                printMessage(serializationLogFile, "deleted existing file - %s \n", generated_json_files_alerts[currentFileIndex]);
+
+                if (rename(generated_tmp_json_files_alerts[currentFileIndex], generated_json_files_alerts[currentFileIndex]) != 0)
+                {
+                    printMessage(serializationLogFile, "Error renaming - %s file\n", generated_tmp_json_files_alerts[currentFileIndex]);
+                }
+            }
+        }
+    }
+}
+
+static void PrintError(DWORD errorCode)
+{
+    LPVOID errorMessage;
+
+    // Format the error message
+    FormatMessage(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        errorCode,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPWSTR)&errorMessage,
+        0,
+        NULL
+    );
+
+    // Print the error message
+    printMessage(serializationLogFile, "ERROR: %s\n", errorMessage);
+
+
+    // Free the buffer allocated by FormatMessage
+    LocalFree(errorMessage);
+}
+
+static char* create_filename_with_index_and_flow_id(const char* filename, size_t index, uint32_t flow_id) {
+    // Find the position of the last '.' in the filename
+    const char* dot = strrchr(filename, '.');
+    if (!dot) {
+        perror("Invalid filename: no extension found");
+        exit(EXIT_FAILURE);
+    }
+
+    // Calculate the length of the new filename
+    size_t base_len = dot - filename;
+    size_t extension_len = strlen(dot);
+    size_t index_len = snprintf(NULL, 0, "%zu", index);
+    size_t flow_id_len = snprintf(NULL, 0, "%" PRIu32, flow_id);
+    size_t new_filename_len = base_len + 1 + index_len + 1 + flow_id_len + extension_len + 1;
+
+    // Allocate memory for the new filename
+    char* new_filename = (char*)malloc(new_filename_len);
+    if (new_filename == NULL) {
+        perror("Failed to allocate memory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Construct the new filename
+    snprintf(new_filename, new_filename_len, "%.*s_%zu_%" PRIu32 "%s", (int)base_len, filename, index, flow_id, dot);
+
+    return new_filename;
+}
+
+
+/**
+   @brief MAIN FUNCTION
+**/
+int main(int argc, char** argv)
+{
+    printDetailedLoggingMessage(NULL, "1: main method calling getParentFolderPathOfExecutable()\n");
+    getParentFolderPathOfExecutable(moduleFolderPath, sizeof(moduleFolderPath));
+    printDetailedLoggingMessage(NULL, "2: main method returns from getParentFolderPathOfExecutable()\n");
+    int logFileSize = strlen(moduleFolderPath) + strlen("nDPIReader_Log_File.txt");
+
+    char* logFile = (char*)malloc(logFileSize * sizeof(char));
+    if (logFile == 0)
+    {
+        printMessage(NULL, "ERROR: Call to malloc failed due to error: %s\n", strerror(errno));
+        exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "3: memory allocation is succcesful\n");
+    }
+
+    strcpy(logFile, moduleFolderPath);
+    strcat(logFile, "\\nDPIReader_Log_File.txt");
+
+    printDetailedLoggingMessage(NULL, "4: Before call to fopen\n");
+    if ((serializationLogFile = fopen(logFile, "w")) == NULL)
+    {
+        printMessage(NULL, "ERROR: Unable to create log file %s: %s\n", logFile, strerror(errno));
+        exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "5: Log file created successfully\n");
+    }
+
+    if (ndpi_get_api_version() != NDPI_API_VERSION)
+    {
+        printMessage(serializationLogFile, "ERROR: nDPI Library version mismatch: please make sure this code and the nDPI library are in sync\n");
+        fclose(serializationLogFile);
+        exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "6: NDPI_API_VERSION check passed\n");
+    }
+
+    // (MM.DD.YYYY.V)
+    printMessage(serializationLogFile, "nDPI Version 01.29.2025-1 - upgraded to ndpi 4.12 version\n");
+    printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
+
+    int i = 1;
+    for (i = 1; i < argc; i++)
+    {
+        printMessage(serializationLogFile, "Argument % d: % s\n", i, argv[i]);
+    }
+
+    if (getenv("AHO_DEBUG"))
+    {
+        ac_automata_enable_debug(1);
+    }
+
+    parseOptions(argc, argv);
+
+    if (domain_to_check)
+    {
+        printDetailedLoggingMessage(NULL, "7: Exiting at domain_to_check\n");
+        ndpiCheckHostStringMatch(domain_to_check);
+        exit(0);
+    }
+
+    if (ip_port_to_check)
+    {
+        ndpiCheckIPMatch(ip_port_to_check);
+        printDetailedLoggingMessage(NULL, "8: Exiting after ndpiCheckIPMatch()\n");
+        exit(0);
+    }
+
+    if (enable_doh_dot_detection)
+    {
+
+        init_doh_bins();
+        /* Clusters are not really used in DoH/DoT detection, but because of how
+           the code has been written, we need to enable also clustering feature */
+        if (num_bin_clusters == 0)
+            num_bin_clusters = 1;
+    }
+
+    if (pCapFilesFolderLocationPath == NULL)
+    {
+        printMessage(serializationLogFile, "ERROR: PCAP files folder location not specified. See help!\n");
+        fclose(serializationLogFile);
+        help(0);
+        exit(0);
+    }
+
+
+    printMessage(serializationLogFile, "\nSearching for pCap files at location      : %s\n", pCapFilesFolderLocationPath);
+    printMessage(serializationLogFile, "JSON files will be generated at location   : %s\n", moduleFolderPath);
+
+    int size = strlen(pCapFilesFolderLocationPath) + strlen("\\*.*");
+
+    pCapFilesSearchString = (char*)malloc(size * sizeof(char));
+    if (pCapFilesSearchString == 0)
+    {
+        printMessage(serializationLogFile, "ERROR: Memory allocation failed for <pCapFilesSearchString>\n");
+        fclose(serializationLogFile);
+        exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "9: malloc() passed\n");
+    }
+
+    strcpy(pCapFilesSearchString, pCapFilesFolderLocationPath);
+    strcat(pCapFilesSearchString, "\\*.*");
+    printMessage(serializationLogFile, "pCap Folder Search Path = %s\n", pCapFilesSearchString);
+
+    int alertFolderSize = strlen(moduleFolderPath) + strlen("Alerts");
+    char* alertFolder = (char*)malloc(alertFolderSize * sizeof(char));
+    if (alertFolder == 0)
+    {
+        printMessage(serializationLogFile, "ERROR: Call to malloc failed due to error: %s\n", strerror(errno));
+        exit(0);
+    }
+
+    strcpy(alertFolder, moduleFolderPath);
+    strcat(alertFolder, "\\Alerts");
+
+    if (!CreateDirectory(alertFolder, NULL))
+    {
+        DWORD errorCode = GetLastError();
+
+        // Check if the error code indicates that the directory already exists
+        if (errorCode == ERROR_ALREADY_EXISTS)
+        {
+            printMessage(serializationLogFile, "Alerts Folder already exists\n");
+        }
+        else
+        {
+            // Print the error message for other errors
+            PrintError(errorCode);
+            fclose(serializationLogFile);
+            exit(0);
+        }
+    }
+    else
+    {
+        printMessage(serializationLogFile, "Alerts Folder created at %s\n", alertFolder);
+    }
+
+    free(alertFolder);
+
+    int eventFolderSize = strlen(moduleFolderPath) + strlen("Events");
+    char* eventFolder = (char*)malloc(alertFolderSize * sizeof(char));
+    if (eventFolder == 0)
+    {
+        printMessage(serializationLogFile, "ERROR: Call to malloc failed due to error: %s\n", strerror(errno));
+        fclose(serializationLogFile);
+        exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "10: memory allocation is succcesful\n");
+    }
+
+    strcpy(eventFolder, moduleFolderPath);
+    strcat(eventFolder, "\\Events");
+
+    if (!CreateDirectory(eventFolder, NULL))
+    {
+        DWORD errorCode = GetLastError();
+
+        // Check if the error code indicates that the directory already exists
+        if (errorCode == ERROR_ALREADY_EXISTS)
+        {
+            printMessage(serializationLogFile, "Events Folder already exists\n");
+        }
+        else
+        {
+            // Print the error message for other errors
+            PrintError(errorCode);
+            fclose(serializationLogFile);
+            exit(0);
+        }
+    }
+    else
+    {
+        printMessage(serializationLogFile, "Events Folder created at %s\n", eventFolder);
+    }
+
+    free(eventFolder);
+
+    if (domain_to_check)
+    {
+        fclose(serializationLogFile);
+        ndpiCheckHostStringMatch(domain_to_check);
+        exit(0);
+    }
+    else
+    {
+        printDetailedLoggingMessage(NULL, "11: after domain_to_check\n");
+    }
+
+    printMessage(serializationLogFile, "Using nDPI (%s) [%d thread(s)]\n", ndpi_revision(), num_threads);
+    const char* gcrypt_ver = ndpi_get_gcrypt_version();
+    if (gcrypt_ver)
+    {
+        printMessage(serializationLogFile, "Using libgcrypt version %s\n", gcrypt_ver);
+    }
+
+    //signal(SIGINT, sigproc);
+
+    do
+    {
+        fetch_files_to_process_and_set_default_options();
+        static loopCounter = 0;
+        loopCounter++;
+
+        printMessage(serializationLogFile, "\n\nSTARTING PCAP/PCAPNG FILEs PROCESSING\n");
+        serialization_format = ndpi_serialization_format_json;
+
+        currentFileIndex = 0;
+        for (currentFileIndex = 0; currentFileIndex < number_of_valid_files_found; currentFileIndex++)
+        {
+            gettimeofday(&startup_time, NULL);
+            memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
+
+            _pcap_file[0] = pcap_files[currentFileIndex];
+
+            printMessage(serializationLogFile, "\tProcessing (%s) [Start]", _pcap_file[0]);
+            for (i = 0; i < num_loops; i++)
+            {
+                test_lib();
+            }
+
+            printMessage(serializationLogFile, "\tProcessing (%s) [End]\n\n", _pcap_file[0]);
+            renameCurrentTempFile();
+
+            if (results_path)  ndpi_free(results_path);
+            if (results_file)  fclose(results_file);
+            if (extcap_dumper) pcap_dump_close(extcap_dumper);
+            if (extcap_fifo_h) pcap_close(extcap_fifo_h);
+            if (enable_malloc_bins)
+                ndpi_free_bin(&malloc_bins);
+            if (csv_fp)        fclose(csv_fp);
+            ndpi_free(_disabled_protocols);
+
+            for (i = 0; i < num_cfgs; i++) {
+                ndpi_free(cfgs[i].proto);
+                ndpi_free(cfgs[i].param);
+                ndpi_free(cfgs[i].value);
+            }
+
+            remove(_pcap_file[0]);
+            free(pcap_files[currentFileIndex]);
+            pcap_files[currentFileIndex] = NULL;
+        }
+    } while (true);
+
+    fclose(serializationLogFile);
+
+#ifdef DEBUG_TRACE
+    if (trace) fclose(trace);
+#endif
+
+    return 0;
+}
+
+/*==============================================================[ Ashwani end ]=================================================================================*/
+
 
 static u_int32_t reader_slot_malloc_bins(u_int64_t v)
 {
@@ -365,11 +1039,13 @@ static float doh_max_distance = 35.5;
 static void init_doh_bins() {
   u_int i;
 
+  printDetailedLoggingMessage(NULL, "Start init_doh_bins()\n"); // Ashwani
   for(i=0; i<NUM_DOH_BINS; i++) {
     ndpi_init_bin(&doh_ndpi_bins[i], ndpi_bin_family8, PLEN_NUM_BINS);
     ndpi_free_bin(&doh_ndpi_bins[i]); /* Hack: we use static bins (see below), so we need to free the dynamic ones just allocated */
     doh_ndpi_bins[i].u.bins8 = doh_centroids[i];
   }
+  printDetailedLoggingMessage(NULL, "End init_doh_bins()\n"); // Ashwani
 }
 
 /* *********************************************** */
@@ -489,7 +1165,7 @@ static void ndpiCheckIPMatch(char *testChar) {
     rc = ndpi_set_config(ndpi_str, cfgs[i].proto, cfgs[i].param, cfgs[i].value);
 
     if (rc != NDPI_CFG_OK) {
-      fprintf(stderr, "Error setting config [%s][%s][%s]: %s (%d)\n",
+      fprintf(stderr, "Error setting config (ndpiCheckIPMatch) [%s][%s][%s]: %s (%d)\n", // Ashwani
 	      (cfgs[i].proto != NULL ? cfgs[i].proto : ""),
 	      cfgs[i].param, cfgs[i].value, ndpi_cfg_error2string(rc), rc);
       exit(-1);
@@ -643,7 +1319,7 @@ static void help(u_int long_help) {
          "          [-p <protos>][-l <loops> [-q][-d][-h][-H][-D][-e <len>][-E <path>][-t][-v <level>]\n"
          "          [-n <threads>][-N <path>][-w <file>][-c <file>][-C <file>][-j <file>][-x <file>]\n"
          "          [-r <file>][-R][-j <file>][-S <file>][-T <num>][-U <num>] [-x <domain>]\n"
-         "          [-a <mode>][-B proto_list][-L <domain suffixes>]\n\n"
+         "          [-a <mode>][-B proto_list][-L <domain suffixes>] [-Z <folder path>]\n\n" // Ashwani
          "Usage:\n"
          "  -i <file.pcap|device>     | Specify a pcap file/playlist to read packets from or a\n"
          "                            | device for live capture (comma-separated list)\n"
@@ -718,6 +1394,7 @@ static void help(u_int long_help) {
          "                            | It is a shortcut to --cfg=tls,dpi.heuristics,0x07\n"
          "  --cfg=proto,param,value   | Configure the specific attribute of this protocol\n"
          "  --dump-fpc-stats          | Print FPC statistics\n"
+         "  -Z <pcap files location>  | Specify folder full path where pcap files are stores for processing\n" // Ashwani: location of pcap files (Example: "C:\Ashwani\misc\nDPI\Testing\pCapFiles")
          ,
          human_readeable_string_len,
          min_pattern_len, max_pattern_len, max_num_packets_per_flow, max_packet_payload_dissection,
@@ -823,6 +1500,7 @@ static struct option longopts[] = {
   { "payload-analysis", required_argument, NULL, 'P'},
   { "result-path", required_argument, NULL, 'w'},
   { "quiet", no_argument, NULL, 'q'},
+  { "pcap-path", required_argument, NULL, 'Z'}, // Ashwani
 
   { "cfg", required_argument, NULL, OPTLONG_VALUE_CFG},
   { "openvpn_heuristics", no_argument, NULL, OPTLONG_VALUE_OPENVPN_HEURISTICS},
@@ -833,7 +1511,7 @@ static struct option longopts[] = {
   {0, 0, 0, 0}
 };
 
-static const char* longopts_short = "a:Ab:B:e:E:c:C:dDFf:g:G:i:Ij:k:K:S:hHp:pP:l:L:r:Rs:tu:v:V:n:rp:x:X:w:q0123:456:7:89:m:MN:T:U:";
+static const char* longopts_short = "a:Ab:B:e:E:c:C:dDFf:g:G:i:Ij:k:K:S:hHp:pP:l:L:r:Rs:tu:v:V:n:rp:x:X:w:q0123:Z:456:7:89:m:MN:T:U:";
 
 /* ********************************** */
 
@@ -1153,7 +1831,7 @@ static void parse_parameters(int argc, char **argv)
 
     case 'i':
     case '3':
-      _pcap_file[0] = optarg;
+        // _pcap_file[0] = optarg;  // Ashwani: This is commented out as we take pcap/pcapng files from the input folder which is set using option '-R'
       break;
 
     case 'I':
@@ -1196,6 +1874,10 @@ static void parse_parameters(int argc, char **argv)
     case 'L':
       _domain_suffixes = optarg;
       break;
+
+    case 'Z':
+        pCapFilesFolderLocationPath = optarg; // Ashwani: This is folder path of pcap/pcapng files
+        break;
 
     case 'n':
       num_threads = atoi(optarg);
@@ -1349,12 +2031,14 @@ static void parse_parameters(int argc, char **argv)
       break;
 
     case 'k':
-      errno = 0;
-      if((serialization_fp = fopen(optarg, "w")) == NULL)
-        {
-          printf("Unable to write on serialization file %s: %s\n", optarg, strerror(errno));
-          exit(1);
-        }
+        // Ashwani: This code is commented out as we create serialization files in main method when we iterate over all the valid files.
+        // found at the location specified by the user.
+        // //
+        //if((serialization_fp = fopen(optarg, "w")) == NULL)
+        //{
+        //  printf("Unable to write on serialization file %s: %s\n", optarg, strerror(errno));
+        //  exit(1);
+        //}
       break;
 
     case 'K':
@@ -1585,29 +2269,33 @@ static void parseOptions(int argc, char **argv) {
     quiet_mode = 1;
   }
 
-  if(!domain_to_check && !ip_port_to_check) {
-    if(_pcap_file[0] == NULL)
-      help(0);
+ //
+// Ashwani: Following code is commented as we now iterate over all valid pcap/pcapng files in main method itself.
+//
 
-    if(strchr(_pcap_file[0], ',')) { /* multiple ingress interfaces */
-      num_threads = 0;               /* setting number of threads = number of interfaces */
-      __pcap_file = strtok(_pcap_file[0], ",");
-      while(__pcap_file != NULL && num_threads < MAX_NUM_READER_THREADS) {
-        _pcap_file[num_threads++] = __pcap_file;
-        __pcap_file = strtok(NULL, ",");
-      }
-    } else {
-      if(num_threads > MAX_NUM_READER_THREADS) num_threads = MAX_NUM_READER_THREADS;
-      for(thread_id = 1; thread_id < num_threads; thread_id++)
-        _pcap_file[thread_id] = _pcap_file[0];
-    }
+  //if(!domain_to_check && !ip_port_to_check) {
+  //  if(_pcap_file[0] == NULL)
+  //    help(0);
 
-    if(num_threads > 1 && enable_malloc_bins == 1)
-      {
-	printf("Memory profiling ('-M') is incompatible with multi-thread enviroment");
-	exit(1);
-      }
-  }
+  //  if(strchr(_pcap_file[0], ',')) { /* multiple ingress interfaces */
+  //    num_threads = 0;               /* setting number of threads = number of interfaces */
+  //    __pcap_file = strtok(_pcap_file[0], ",");
+  //    while(__pcap_file != NULL && num_threads < MAX_NUM_READER_THREADS) {
+  //      _pcap_file[num_threads++] = __pcap_file;
+  //      __pcap_file = strtok(NULL, ",");
+  //    }
+  //  } else {
+  //    if(num_threads > MAX_NUM_READER_THREADS) num_threads = MAX_NUM_READER_THREADS;
+  //    for(thread_id = 1; thread_id < num_threads; thread_id++)
+  //      _pcap_file[thread_id] = _pcap_file[0];
+  //  }
+
+  //  if(num_threads > 1 && enable_malloc_bins == 1)
+  //  {
+  //    printf("Memory profiling ('-M') is incompatible with multi-thread enviroment");
+  //    exit(1);
+  //  }
+  //}
 
 #ifdef __linux__
 #ifndef USE_DPDK
@@ -1626,6 +2314,8 @@ static void parseOptions(int argc, char **argv) {
 #endif
 #endif
 #endif
+
+  printDetailedLoggingMessage(NULL, "End parseOptions()\n"); // Ashwani
 }
 
 /* ********************************** */
@@ -1708,7 +2398,12 @@ static void print_ndpi_address_port_list_file(FILE *out, const char *label, ndpi
 /**
  * @brief Print the flow
  */
-static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t thread_id) {
+static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t thread_id) 
+{
+  // Ashwani: return from here as we do not want to print anything to console window
+  //
+  return;
+
   FILE *out = results_file ? results_file : stdout;
   u_int8_t known_tls;
   char buf[32], buf1[64];
@@ -2227,8 +2922,16 @@ static void printFlow(u_int32_t id, struct ndpi_flow_info *flow, u_int16_t threa
   }
 }
 
+
 static void printFlowSerialized(struct ndpi_flow_info *flow)
 {
+   // Ashwani
+   //
+   if (!IsValidFlowForLogging(printDetailedLoggingMessage, serializationLogFile, flow))
+   {
+       return;
+   }
+
   char *json_str = NULL;
   u_int32_t json_str_len = 0;
   ndpi_serializer * const serializer = &flow->ndpi_flow_serializer;
@@ -2236,10 +2939,40 @@ static void printFlowSerialized(struct ndpi_flow_info *flow)
   double f = (double)flow->first_seen_ms, l = (double)flow->last_seen_ms;
   float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
 
+  // Ashwani added code starts here
   ndpi_serialize_string_uint32(serializer, "flow_id", flow->flow_id);
-  ndpi_serialize_string_double(serializer, "first_seen", f / 1000., "%.3f");
-  ndpi_serialize_string_double(serializer, "last_seen", l / 1000., "%.3f");
-  ndpi_serialize_string_double(serializer, "duration", (l-f)/1000.0, "%.3f");
+
+  time_t start_seconds = f / 1000;
+  struct tm* timeinfo;
+  timeinfo = gmtime(&start_seconds);
+  char datetime_start_str[30];
+  strftime(datetime_start_str, 30, "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+
+
+  time_t end_seconds = l / 1000;
+  timeinfo = gmtime(&end_seconds);
+  char datetime_end_str[30];
+  strftime(datetime_end_str, 30, "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+
+  ndpi_serialize_start_of_block(serializer, "event");
+  ndpi_serialize_string_string(serializer, "start", datetime_start_str);
+  ndpi_serialize_string_string(serializer, "end", datetime_end_str);
+
+  long long nanoseconds = (end_seconds - start_seconds) * 1000000;
+
+  ndpi_serialize_string_uint64(serializer, "duration", nanoseconds);
+  ndpi_serialize_end_of_block(serializer);
+  // Ashwani added code ends here
+
+  // Ashwani :commented out code start
+  // 
+  //ndpi_serialize_string_uint32(serializer, "flow_id", flow->flow_id);
+  //ndpi_serialize_string_double(serializer, "first_seen", f / 1000., "%.3f");
+  //ndpi_serialize_string_double(serializer, "last_seen", l / 1000., "%.3f");
+  //ndpi_serialize_string_double(serializer, "duration", (l-f)/1000.0, "%.3f");
+
+  // Ashwani :commented out code end
+  // 
   ndpi_serialize_string_uint32(serializer, "vlan_id", flow->vlan_id);
   ndpi_serialize_string_uint32(serializer, "bidirectional", flow->bidirectional);
 
@@ -2349,11 +3082,85 @@ static void printFlowSerialized(struct ndpi_flow_info *flow)
       exit(-1);
     }
 
-  fprintf(serialization_fp, "%.*s\n", (int)json_str_len, json_str);
+  // Ashwani
+  //
+  char* converted_json_str = NULL;
+  size_t flowRisksCount = 0;
+  ConvertnDPIDataFormat(json_str, &converted_json_str, &flowRisksCount, 0, flow->http.response_status_code, flow->http.user_agent, flow->http.filename, flow->http.content_type, flow->http.request_content_type);
 
-#ifdef CUSTOM_NDPI_PROTOCOLS
-#include "../../nDPI-custom/ndpiReader_flow_serialize.c"
-#endif
+  if (converted_json_str != NULL)
+  {
+      int length = strlen(converted_json_str);
+
+      if (length != 0)
+      {
+          if (flowRisksCount)
+          {
+              serialization_fp = fopen(generated_tmp_json_files_alerts[currentFileIndex], "a");
+              if (serialization_fp == NULL)
+              {
+                  printMessage(serializationLogFile, "Unable to create file %s: %s\n", generated_tmp_json_files_alerts[currentFileIndex], strerror(errno));
+              }
+              else
+              {
+                  int length = strlen(converted_json_str);
+                  fprintf(serialization_fp, "%.*s\n", (int)length, converted_json_str);
+                  fclose(serialization_fp);
+              }
+
+              for (size_t index = 1; index < flowRisksCount; index++)
+              {
+                  size_t flowRisks = 0;
+                  free(converted_json_str);
+                  ConvertnDPIDataFormat(json_str, &converted_json_str, &flowRisks, index, flow->http.response_status_code, flow->http.user_agent, flow->http.filename, flow->http.content_type, flow->http.request_content_type);
+
+				  char* indexedFileName = create_filename_with_index_and_flow_id(generated_json_files_alerts[currentFileIndex], index, flow->flow_id);
+				  FILE* serialization_fp_indexed = fopen(indexedFileName, "a");
+				  if (serialization_fp == NULL)
+				  {
+					  printMessage(serializationLogFile, "Unable to create file %s: %s\n", generated_tmp_json_files_alerts[currentFileIndex], strerror(errno));
+				  }
+				  else
+				  {
+					  int length = strlen(converted_json_str);
+					  fprintf(serialization_fp_indexed, "%.*s\n", (int)length, converted_json_str);
+					  fclose(serialization_fp_indexed);
+				  }
+				  free(indexedFileName);                                                    
+              }
+          }
+
+          char* converted_json_str_no_risk = NULL;
+          if (flowRisksCount)
+          {
+              DeletenDPIRisk(converted_json_str, &converted_json_str_no_risk);
+          }
+
+          serialization_fp = fopen(generated_tmp_json_files_events[currentFileIndex], "a");
+          if (serialization_fp == NULL)
+          {
+              printMessage(serializationLogFile, "Unable to create file %s: %s\n", generated_tmp_json_files_events[currentFileIndex], strerror(errno));
+
+          }
+          else
+          {
+              if (flowRisksCount)
+              {
+                  int length = strlen(converted_json_str_no_risk);
+                  fprintf(serialization_fp, "%.*s\n", (int)length, converted_json_str_no_risk);
+              }
+              else
+              {
+                  int length = strlen(converted_json_str);
+                  fprintf(serialization_fp, "%.*s\n", (int)length, converted_json_str);
+              }
+              fclose(serialization_fp);
+          }
+          free(converted_json_str_no_risk);
+      }
+  }
+
+  free(converted_json_str);
 }
 
 /* ********************************** */
@@ -2951,6 +3758,8 @@ static void on_protocol_discovered(struct ndpi_workflow * workflow,
  */
 static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle,
                            struct ndpi_global_context *g_ctx) {
+
+  printDetailedLoggingMessage(NULL, "Start setupDetection()\n"); // Ashwani
   NDPI_PROTOCOL_BITMASK enabled_bitmask;
   struct ndpi_workflow_prefs prefs;
   int i, ret;
@@ -3050,6 +3859,7 @@ static void setupDetection(u_int16_t thread_id, pcap_t * pcap_handle,
     if(atoi(buf))
       monitoring_enabled = 1;
   }
+  printDetailedLoggingMessage(NULL, "End setupDetection()\n"); // Ashwani
 }
 
 /* *********************************************** */
@@ -3917,10 +4727,11 @@ static void printFlowsStats() {
       printFlow(i+1, all_flows[i].flow, all_flows[i].thread_id);
   }
 
-  if (serialization_fp != NULL &&
-      serialization_format != ndpi_serialization_format_unknown)
-    {
-      unsigned int i;
+  // Ashwani: removed serialization_fp != NULL check
+  //
+  if ( serialization_format != ndpi_serialization_format_unknown)
+  {
+    unsigned int i;
 
       num_flows = 0;
       for(thread_id = 0; thread_id < num_threads; thread_id++) {
@@ -3932,9 +4743,9 @@ static void printFlowsStats() {
 	}
       }
 
-      for(i=0; i<num_flows; i++)	
-	printFlowSerialized(all_flows[i].flow);	
-    }
+      for(i=0; i<num_flows; i++)
+          printFlowSerialized(all_flows[i].flow);
+  }
 
   ndpi_free(all_flows);
 }
@@ -4560,7 +5371,9 @@ static void configurePcapHandle(pcap_t * pcap_handle) {
 /**
  * @brief Open a pcap file or a specified device - Always returns a valid pcap_t
  */
-static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_file) {
+static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_file) 
+{
+    printDetailedLoggingMessage(NULL, "Inside openPcapFileOrDevice()\n");     // Ashwani
 #ifndef USE_DPDK
   u_int snaplen = 1536;
   int promisc = 1;
@@ -4594,21 +5407,21 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
       char filename[256] = { 0 };
 
       if(strstr((char*)pcap_file, (char*)".pcap"))
-	printf("ERROR: could not open pcap file: %s\n", pcap_error_buffer);
+            printDetailedLoggingMessage(NULL, "ERROR: could not open pcap file: %s\n", pcap_error_buffer); // Ashwani
 
       /* Trying to open as a playlist as last attempt */
       else if((getNextPcapFileFromPlaylist(thread_id, filename, sizeof(filename)) != 0)
 	      || ((pcap_handle = pcap_open_offline(filename, pcap_error_buffer)) == NULL)) {
 	/* This probably was a bad interface name, printing a generic error */
-	printf("ERROR: could not open %s: %s\n", filename, pcap_error_buffer);
+              printDetailedLoggingMessage(NULL, "ERROR: could not open %s: %s\n", filename, pcap_error_buffer); // Ashwani
 	exit(-1);
       } else {
 	if(!quiet_mode)
-	  printf("Reading packets from playlist %s...\n", pcap_file);
+            printDetailedLoggingMessage(NULL, "Reading packets from playlist %s...\n", pcap_file); // Ashwani
       }
     } else {
       if(!quiet_mode)
-	printf("Reading packets from pcap file %s...\n", pcap_file);
+              printDetailedLoggingMessage(NULL, "Reading packets from pcap file %s...\n", pcap_file); // Ashwani
     }
   } else {
     live_capture = 1;
@@ -4617,7 +5430,7 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
 #ifdef USE_DPDK
       printf("Capturing from DPDK (port 0)...\n");
 #else
-      printf("Capturing live traffic from device %s...\n", pcap_file);
+            printDetailedLoggingMessage(NULL, "Capturing live traffic from device %s...\n", pcap_file); // Ashwani
 #endif
     }
   }
@@ -4635,7 +5448,8 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
 #endif
   }
 
-  return pcap_handle;
+      printDetailedLoggingMessage(NULL, "End openPcapFileOrDevice()\n"); // Ashwani
+      return pcap_handle;
 }
 
 /**
@@ -4643,7 +5457,9 @@ static pcap_t * openPcapFileOrDevice(u_int16_t thread_id, const u_char * pcap_fi
  */
 static void ndpi_process_packet(u_char *args,
 				const struct pcap_pkthdr *header,
-				const u_char *packet) {
+				const u_char *packet) 
+{
+  printDetailedLoggingMessage(NULL, "Inside ndpi_process_packet()\n");
   struct ndpi_proto p;
   ndpi_risk flow_risk;
   struct ndpi_flow_info *flow;
@@ -4842,7 +5658,9 @@ static void ndpi_process_packet(u_char *args,
  * @brief Call pcap_loop() to process packets from a live capture or savefile
  */
 static void runPcapLoop(u_int16_t thread_id) {
-  if((!shutdown_app) && (ndpi_thread_info[thread_id].workflow->pcap_handle != NULL)) {
+  printDetailedLoggingMessage(NULL, "Inside runPcapLoop()\n"); // Ashwani
+  if((!shutdown_app) && (ndpi_thread_info[thread_id].workflow->pcap_handle != NULL)) 
+  {
     int datalink_type = pcap_datalink(ndpi_thread_info[thread_id].workflow->pcap_handle);
 
     /* When using as extcap interface, the output/dumper pcap must have the same datalink
@@ -4863,6 +5681,7 @@ static void runPcapLoop(u_int16_t thread_id) {
     if (ret == -1)
       printf("Error while reading pcap file: '%s'\n", pcap_geterr(ndpi_thread_info[thread_id].workflow->pcap_handle));
   }
+  printDetailedLoggingMessage(NULL, "End of runPcapLoop()\n"); // Ashwani
 }
 #endif
 
@@ -4870,6 +5689,7 @@ static void runPcapLoop(u_int16_t thread_id) {
  * @brief Process a running thread
  */
 void * processing_thread(void *_thread_id) {
+    printDetailedLoggingMessage(NULL, "Inside processing_thread()\n"); // Ashwani
 #ifdef WIN64
   long long int thread_id = (long long int)_thread_id;
 #else
@@ -4951,6 +5771,7 @@ void * processing_thread(void *_thread_id) {
     bpf_cfilter = NULL;
   }
 
+  printDetailedLoggingMessage(NULL, "End of processing_thread()\n"); // Ashwani
   return NULL;
 }
 
@@ -4960,6 +5781,8 @@ void * processing_thread(void *_thread_id) {
  * @brief Begin, process, end detection process
  */
 void test_lib() {
+
+  printDetailedLoggingMessage(NULL, "Inside test_lib()\n");// Ashwani
   u_int64_t processing_time_usec, setup_time_usec;
 #ifdef WIN64
   long long int thread_id;
@@ -5000,43 +5823,10 @@ void test_lib() {
 
   gettimeofday(&begin, NULL);
 
-  int status;
-  void * thd_res;
-
-  /* Running processing threads */
-  for(thread_id = 0; thread_id < num_threads; thread_id++) {
-    status = pthread_create(&ndpi_thread_info[thread_id].pthread, NULL, processing_thread, (void *) thread_id);
-    /* check pthreade_create return value */
-    if(status != 0) {
-#ifdef WIN64
-      fprintf(stderr, "error on create %lld thread\n", thread_id);
-#else
-      fprintf(stderr, "error on create %ld thread\n", thread_id);
-#endif
-      exit(-1);
-    }
-  }
-  /* Waiting for completion */
-  for(thread_id = 0; thread_id < num_threads; thread_id++) {
-    status = pthread_join(ndpi_thread_info[thread_id].pthread, &thd_res);
-    /* check pthreade_join return value */
-    if(status != 0) {
-#ifdef WIN64
-      fprintf(stderr, "error on join %lld thread\n", thread_id);
-#else
-      fprintf(stderr, "error on join %ld thread\n", thread_id);
-#endif
-      exit(-1);
-    }
-    if(thd_res != NULL) {
-#ifdef WIN64
-      fprintf(stderr, "error on returned value of %lld joined thread\n", thread_id);
-#else
-      fprintf(stderr, "error on returned value of %ld joined thread\n", thread_id);
-#endif
-      exit(-1);
-    }
-  }
+  // Ashwani: Thread related code removed.
+  //
+  thread_id = 0;
+  processing_thread((void*)thread_id);
 
 #ifdef USE_DPDK
   dpdk_port_deinit(dpdk_port_id);
@@ -5057,6 +5847,7 @@ void test_lib() {
   }
 
   ndpi_global_deinit(g_ctx);
+  printDetailedLoggingMessage(NULL, "End of test_lib()\n"); // Ashwani
 }
 
 /* *********************************************** */
@@ -6592,39 +7383,13 @@ void domainCacheTestUnit() {
   unlink(fname);
 }
 
-/* *********************************************** */
+/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
+static void runTests()
+{
+    int skipUnitTests = true;
 
-/**
-   @brief MAIN FUNCTION
-**/
-int main(int argc, char **argv) {
-  int i;
-#ifdef NDPI_EXTENDED_SANITY_CHECKS
-  int skip_unit_tests = 0;
-#else
-  int skip_unit_tests = 1;
-#endif
-
-#ifdef DEBUG_TRACE
-  trace = fopen("/tmp/ndpiReader.log", "a");
-
-  if(trace) {
-    int i;
-
-    fprintf(trace, " #### %s #### \n", __FUNCTION__);
-    fprintf(trace, " #### [argc: %u] #### \n", argc);
-
-    for(i=0; i<argc; i++)
-      fprintf(trace, " #### [%d] [%s]\n", i, argv[i]);
-  }
-#endif
-
-  if(ndpi_get_api_version() != NDPI_API_VERSION) {
-    printf("nDPI Library version mismatch: please make sure this code and the nDPI library are in sync\n");
-    return(-1);
-  }
-
-  if(!skip_unit_tests) {
+    if (!skipUnitTests)
+    {
 #ifndef DEBUG_TRACE
     /* Skip tests when debugging */
 
@@ -6679,85 +7444,9 @@ int main(int argc, char **argv) {
 #endif
   }
 
-  gettimeofday(&startup_time, NULL);
-  memset(ndpi_thread_info, 0, sizeof(ndpi_thread_info));
-
-  if(getenv("AHO_DEBUG"))
-    ac_automata_enable_debug(1);
-
-  parseOptions(argc, argv);
-
-  if(domain_to_check) {
-    ndpiCheckHostStringMatch(domain_to_check);
-    exit(0);
-  }
-  
-  if(ip_port_to_check) {
-    ndpiCheckIPMatch(ip_port_to_check);
-    exit(0);
-  }
-
-  if(enable_doh_dot_detection) {
-    init_doh_bins();
-    /* Clusters are not really used in DoH/DoT detection, but because of how
-       the code has been written, we need to enable also clustering feature */
-    if(num_bin_clusters == 0)
-      num_bin_clusters = 1;
-  }
-
-#ifdef CUSTOM_NDPI_PROTOCOLS
-#include "../../nDPI-custom/ndpiReader_init.c"
-#endif
-  
-  if(!quiet_mode) {
-    printf("\n-----------------------------------------------------------\n"
-	   "* NOTE: This is demo app to show *some* nDPI features.\n"
-	   "* In this demo we have implemented only some basic features\n"
-	   "* just to show you what you can do with the library. Feel \n"
-	   "* free to extend it and send us the patches for inclusion\n"
-	   "------------------------------------------------------------\n\n");
-
-    printf("Using nDPI (%s) [%d thread(s)]\n", ndpi_revision(), num_threads);
-
-    const char *gcrypt_ver = ndpi_get_gcrypt_version();
-    if(gcrypt_ver)
-      printf("Using libgcrypt version %s\n", gcrypt_ver);
-  }
-
-  signal(SIGINT, sigproc);
-
-  for(i=0; i<num_loops; i++)
-    test_lib();
-
-  if(results_path)  ndpi_free(results_path);
-  if(results_file)  fclose(results_file);
-  if(extcap_dumper) pcap_dump_close(extcap_dumper);
-  if(extcap_fifo_h) pcap_close(extcap_fifo_h);
-  if(enable_malloc_bins) ndpi_free_bin(&malloc_bins);
-  if(csv_fp)         fclose(csv_fp);
-  if(fingerprint_fp) fclose(fingerprint_fp);
-
-  ndpi_free(_disabled_protocols);
-
-  for(i = 0; i < num_cfgs; i++) {
-    ndpi_free(cfgs[i].proto);
-    ndpi_free(cfgs[i].param);
-    ndpi_free(cfgs[i].value);
-  }
-
-  for(i = 0; i < fargc; i++)
-    ndpi_free(fargv[i]);
-
-#ifdef CUSTOM_NDPI_PROTOCOLS
-#include "../../nDPI-custom/ndpiReader_term.c"
-#endif
-
-#ifdef DEBUG_TRACE
-  if(trace) fclose(trace);
-#endif
-
-  return 0;
 }
+
+/* ----------------------------------------------------------------------------------------------------------------------------------------------- */
 
 #ifdef _MSC_BUILD
 int WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)

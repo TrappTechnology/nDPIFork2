@@ -78,6 +78,7 @@ struct NDPI_Data
     char* confidence_value;
     struct NDPI_tls tls;
     char* proto_id;
+    char* proto;
     char* proto_by_ip;
     int proto_by_ip_id;
     int encrypted;
@@ -264,6 +265,7 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
     result.confidence_value = NULL;
     result.proto_id = NULL;
     result.proto_by_ip = NULL;
+    result.proto = NULL;
     result.proto_by_ip_id = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.encrypted = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.category_id = 84742891;
@@ -413,6 +415,12 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
         if (json_object_object_get_ex(ndpiObject, "proto_by_ip", &proto_by_ip))
         {
             result.proto_by_ip = _strdup(json_object_get_string(proto_by_ip));
+        }
+
+        json_object* proto;
+        if (json_object_object_get_ex(ndpiObject, "proto", &proto))
+        {
+            result.proto = _strdup(json_object_get_string(proto));
         }
 
         json_object* proto_by_ip_id;
@@ -853,6 +861,11 @@ static void FreeConvertnDPIDataFormat(struct NDPI_Data* ndpiData)
         free(ndpiData->proto_by_ip);
     }
 
+    if (ndpiData->proto != NULL)
+    {
+        free(ndpiData->proto);
+    }
+
     if (ndpiData->category != NULL)
     {
         free(ndpiData->category);
@@ -950,47 +963,8 @@ static void add_nDPI_Data(json_object** root_object, struct NDPI_Data nDPIStruct
 }
 
 /*--------------------------------------------------------------------------------------------------------------------------------------*/
-static void add_Root_Data(json_object** root_object,  struct Root_data rootDataStructure, int flowRiskCount, char* proto_by_ip)
+static void add_Root_Data(json_object** root_object,  struct Root_data rootDataStructure, int flowRiskCount, char* proto_by_ip, char* proto)
 {
-    json_object* src_object = json_object_new_object();
-
-    bool addSrc = FALSE;
-    if (rootDataStructure.src_ip != NULL)
-    {
-        json_object_object_add(src_object, "ip", json_object_new_string(rootDataStructure.src_ip));
-        addSrc = TRUE;
-    }
-
-    if (rootDataStructure.src_port != RANDOM_UNINTIALIZED_NUMBER_VALUE)
-    {
-        json_object_object_add(src_object, "port", json_object_new_int(rootDataStructure.src_port));
-        addSrc = TRUE;
-    }
-
-    if (addSrc)
-    {
-        json_object_object_add(*root_object, "source", src_object);
-    }
-
-    bool addDest = FALSE;
-    json_object* dest_object = json_object_new_object();
-
-    if (rootDataStructure.dest_ip != NULL)
-    {
-        json_object_object_add(dest_object, "ip", json_object_new_string(rootDataStructure.dest_ip));
-        addDest = TRUE;
-    }
-
-    if (rootDataStructure.dst_port != RANDOM_UNINTIALIZED_NUMBER_VALUE)
-    {
-        json_object_object_add(dest_object, "port", json_object_new_int(rootDataStructure.dst_port));
-        addDest = TRUE;
-    }
-
-    if (addDest)
-    {
-        json_object_object_add(*root_object, "destination", dest_object);
-    }
 
     json_object* network_object = json_object_new_object();
     bool addNetwork = FALSE;
@@ -1028,6 +1002,11 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         addNetwork = TRUE;
     }
 
+    if (proto != NULL)
+    {
+        json_object_object_add(network_object, "proto", json_object_new_string(proto));
+        addNetwork = TRUE;
+    }
 
     if (addNetwork)
     {
@@ -1078,32 +1057,62 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         json_object_object_add(*root_object, "flow", flow_id_object);
     }
 
-    // Xfer starts here
+    json_object* src_object = json_object_new_object();
 
-    json_object* xfer_object = json_object_new_object();
-    bool addXfer = FALSE;
+    bool addSrc = FALSE;
+    if (rootDataStructure.src_ip != NULL)
+    {
+        json_object_object_add(src_object, "ip", json_object_new_string(rootDataStructure.src_ip));
+        addSrc = TRUE;
+    }
+
+    if (rootDataStructure.src_port != RANDOM_UNINTIALIZED_NUMBER_VALUE)
+    {
+        json_object_object_add(src_object, "port", json_object_new_int(rootDataStructure.src_port));
+        addSrc = TRUE;
+    }
+
     if (rootDataStructure.xfer.source.packets != RANDOM_UNINTIALIZED_NUMBER_VALUE)
     {
-        json_object* packets_object = json_object_new_object();
-        json_object_object_add(packets_object, "packets", json_object_new_int(rootDataStructure.xfer.source.packets));
-        json_object_object_add(packets_object, "bytes", json_object_new_int(rootDataStructure.xfer.source.bytes));
-        json_object_object_add(xfer_object, "source", packets_object);
-        addXfer = TRUE;
+        json_object_object_add(src_object, "packets", json_object_new_int(rootDataStructure.xfer.source.packets));
+        json_object_object_add(src_object, "bytes", json_object_new_int(rootDataStructure.xfer.source.bytes));
+        addSrc = TRUE;
     }
+
+
+    if (addSrc)
+    {
+        json_object_object_add(*root_object, "source", src_object);
+    }
+
+    bool addDest = FALSE;
+    json_object* dest_object = json_object_new_object();
+
+    if (rootDataStructure.dest_ip != NULL)
+    {
+        json_object_object_add(dest_object, "ip", json_object_new_string(rootDataStructure.dest_ip));
+        addDest = TRUE;
+    }
+
+    if (rootDataStructure.dst_port != RANDOM_UNINTIALIZED_NUMBER_VALUE)
+    {
+        json_object_object_add(dest_object, "port", json_object_new_int(rootDataStructure.dst_port));
+        addDest = TRUE;
+    }
+
 
     if (rootDataStructure.xfer.destination.packets != RANDOM_UNINTIALIZED_NUMBER_VALUE)
     {
-        json_object* packets_object = json_object_new_object();
-        json_object_object_add(packets_object, "packets", json_object_new_int(rootDataStructure.xfer.destination.packets));
-        json_object_object_add(packets_object, "bytes", json_object_new_int(rootDataStructure.xfer.destination.bytes));
-        json_object_object_add(xfer_object, "destination", packets_object);
-        addXfer = TRUE;
+        json_object_object_add(dest_object, "packets", json_object_new_int(rootDataStructure.xfer.destination.packets));
+        json_object_object_add(dest_object, "bytes", json_object_new_int(rootDataStructure.xfer.destination.bytes));   
+        addDest = TRUE;
     }
 
-    if (addXfer)
+    if (addDest)
     {
-        json_object_object_add(*root_object, "xfer", xfer_object);
+        json_object_object_add(*root_object, "destination", dest_object);
     }
+
 
     // hostname
     if (rootDataStructure.hostname != NULL)
@@ -1124,7 +1133,7 @@ void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, siz
     add_nDPI_Data(&root_object, ndpiData, flowRiskIndex);
 
     struct Root_data rootData = getRootDataStructure(originalJsonStr);
-    add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count, ndpiData.proto_by_ip);
+    add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count, ndpiData.proto_by_ip, ndpiData.proto);
 
     // http start
     struct json_object* http_obj = json_object_new_object();

@@ -78,7 +78,7 @@ struct NDPI_Data
     char* confidence_value;
     struct NDPI_tls tls;
     char* proto_id;
-    char* proto;
+    char* protocol;
     char* proto_by_ip;
     int proto_by_ip_id;
     int encrypted;
@@ -265,7 +265,7 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
     result.confidence_value = NULL;
     result.proto_id = NULL;
     result.proto_by_ip = NULL;
-    result.proto = NULL;
+    result.protocol = NULL;
     result.proto_by_ip_id = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.encrypted = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.category_id = 84742891;
@@ -420,7 +420,7 @@ struct NDPI_Data getnDPIStructure(const char* ndpiJson)
         json_object* proto;
         if (json_object_object_get_ex(ndpiObject, "proto", &proto))
         {
-            result.proto = _strdup(json_object_get_string(proto));
+            result.protocol = _strdup(json_object_get_string(proto));
         }
 
         json_object* proto_by_ip_id;
@@ -861,9 +861,9 @@ static void FreeConvertnDPIDataFormat(struct NDPI_Data* ndpiData)
         free(ndpiData->proto_by_ip);
     }
 
-    if (ndpiData->proto != NULL)
+    if (ndpiData->protocol != NULL)
     {
-        free(ndpiData->proto);
+        free(ndpiData->protocol);
     }
 
     if (ndpiData->category != NULL)
@@ -963,7 +963,7 @@ static void add_nDPI_Data(json_object** root_object, struct NDPI_Data nDPIStruct
 }
 
 /*--------------------------------------------------------------------------------------------------------------------------------------*/
-static void add_Root_Data(json_object** root_object,  struct Root_data rootDataStructure, int flowRiskCount, char* proto_by_ip, char* proto)
+static void add_Root_Data(json_object** root_object,  struct Root_data rootDataStructure, int flowRiskCount, char* proto_by_ip, char* protocol)
 {
 
     json_object* network_object = json_object_new_object();
@@ -1002,9 +1002,9 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         addNetwork = TRUE;
     }
 
-    if (proto != NULL)
+    if (protocol != NULL)
     {
-        json_object_object_add(network_object, "proto", json_object_new_string(proto));
+        json_object_object_add(network_object, "protocol", json_object_new_string(protocol));
         addNetwork = TRUE;
     }
 
@@ -1133,7 +1133,7 @@ void ConvertnDPIDataFormat(char* originalJsonStr, char** converted_json_str, siz
     add_nDPI_Data(&root_object, ndpiData, flowRiskIndex);
 
     struct Root_data rootData = getRootDataStructure(originalJsonStr);
-    add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count, ndpiData.proto_by_ip, ndpiData.proto);
+    add_Root_Data(&root_object, rootData, ndpiData.flow_risk_count, ndpiData.proto_by_ip, ndpiData.protocol);
 
     // http start
     struct json_object* http_obj = json_object_new_object();

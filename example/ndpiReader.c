@@ -763,7 +763,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 02.04.2025-1 - Added network.proto, moved xfer.source/destination.packets/bytes fields to source and destination \n");
+    printMessage(serializationLogFile, "nDPI Version 02.05.2025-1 - network.proto renamed to network.protocol \n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
 
     int i = 1;

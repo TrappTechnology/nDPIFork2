@@ -715,6 +715,51 @@ static char* create_filename_with_index_and_flow_id(const char* filename, size_t
     return new_filename;
 }
 
+static void format_time(FILETIME fileTime, char* buffer, size_t bufferSize) 
+{
+    SYSTEMTIME stUTC;
+    FileTimeToSystemTime(&fileTime, &stUTC);
+
+    // Format as ISO 8601 (UTC time with "Z" suffix)
+    snprintf(buffer, bufferSize, "%04d-%02d-%02dT%02d:%02d:%02dZ",
+        stUTC.wYear, stUTC.wMonth, stUTC.wDay,
+        stUTC.wHour, stUTC.wMinute, stUTC.wSecond);
+}
+
+static long long filetime_to_seconds(FILETIME ft)
+{
+    ULARGE_INTEGER time;
+    time.LowPart = ft.dwLowDateTime;
+    time.HighPart = ft.dwHighDateTime;
+    return time.QuadPart / 10000000; // Convert from 100-nanosecond intervals to seconds
+}
+
+long long filetime_to_nanoseconds(FILETIME ft) {
+    ULARGE_INTEGER time;
+    time.LowPart = ft.dwLowDateTime;
+    time.HighPart = ft.dwHighDateTime;
+    return time.QuadPart * 100; // FILETIME is in 100-nanosecond intervals
+}
+
+static void get_file_times(const char* file_path, char* creationTimeStr, char* modificationTimeStr, double* duration_seconds)
+{
+    WIN32_FILE_ATTRIBUTE_DATA fileInfo;
+
+    if (!GetFileAttributesEx(file_path, GetFileExInfoStandard, &fileInfo)) 
+    {
+        printDetailedLoggingMessage(NULL, "GetFileAttributesEx failed for file %s\n", file_path);
+        return;
+    }
+
+    // Format creation and modification times
+    format_time(fileInfo.ftCreationTime, creationTimeStr, 25);
+    format_time(fileInfo.ftLastWriteTime, modificationTimeStr, 25);
+
+    // Calculate duration in nanoseconds
+    double creation_ns = filetime_to_nanoseconds(fileInfo.ftCreationTime);
+    double modified_ns = filetime_to_nanoseconds(fileInfo.ftLastWriteTime);
+    *duration_seconds = modified_ns - creation_ns;
+}
 
 /**
    @brief MAIN FUNCTION
@@ -763,7 +808,7 @@ int main(int argc, char** argv)
     }
 
     // (MM.DD.YYYY.V)
-    printMessage(serializationLogFile, "nDPI Version 02.05.2025-1 - network.proto renamed to network.protocol \n");
+    printMessage(serializationLogFile, "nDPI Version 02.12.2025-1 - event.start and event.end fields now are pcap's file creation and last modification time\n");
     printMessage(serializationLogFile, "Number of arguments: %d\n", argc - 1); // argc includes the program name
 
     int i = 1;
@@ -2935,32 +2980,39 @@ static void printFlowSerialized(struct ndpi_flow_info *flow)
   char *json_str = NULL;
   u_int32_t json_str_len = 0;
   ndpi_serializer * const serializer = &flow->ndpi_flow_serializer;
-  //float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
-  double f = (double)flow->first_seen_ms, l = (double)flow->last_seen_ms;
   float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
+  
+  // 02-11-2025 <Ashwani>
+  // old "start"/"end" time code is commented.
+  //double f = (double)flow->first_seen_ms, l = (double)flow->last_seen_ms;
+  //float data_ratio = ndpi_data_ratio(flow->src2dst_bytes, flow->dst2src_bytes);
 
   // Ashwani added code starts here
   ndpi_serialize_string_uint32(serializer, "flow_id", flow->flow_id);
 
-  time_t start_seconds = f / 1000;
-  struct tm* timeinfo;
-  timeinfo = gmtime(&start_seconds);
-  char datetime_start_str[30];
-  strftime(datetime_start_str, 30, "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+  //time_t start_seconds = f / 1000;
+  //struct tm* timeinfo;
+  //timeinfo = gmtime(&start_seconds);
+  //char datetime_start_str[30];
+  //strftime(datetime_start_str, 30, "%Y-%m-%dT%H:%M:%SZ", timeinfo);
 
 
-  time_t end_seconds = l / 1000;
-  timeinfo = gmtime(&end_seconds);
-  char datetime_end_str[30];
-  strftime(datetime_end_str, 30, "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+  //time_t end_seconds = l / 1000;
+  //timeinfo = gmtime(&end_seconds);
+  //char datetime_end_str[30];
+  //strftime(datetime_end_str, 30, "%Y-%m-%dT%H:%M:%SZ", timeinfo);
+  //long long nanoseconds = (end_seconds - start_seconds) * 1000000;
+
+  char creationTimeStr[25], modificationTimeStr[25];
+  double duration_ns;
+
+  get_file_times(pcap_files[currentFileIndex], creationTimeStr, modificationTimeStr, &duration_ns);
 
   ndpi_serialize_start_of_block(serializer, "event");
-  ndpi_serialize_string_string(serializer, "start", datetime_start_str);
-  ndpi_serialize_string_string(serializer, "end", datetime_end_str);
+  ndpi_serialize_string_string(serializer, "start", creationTimeStr);
+  ndpi_serialize_string_string(serializer, "end", modificationTimeStr);
 
-  long long nanoseconds = (end_seconds - start_seconds) * 1000000;
-
-  ndpi_serialize_string_uint64(serializer, "duration", nanoseconds);
+  ndpi_serialize_string_double(serializer, "duration", duration_ns, "%.2f");
   ndpi_serialize_end_of_block(serializer);
   // Ashwani added code ends here
 

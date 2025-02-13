@@ -65,7 +65,7 @@ struct Root_data
     int flow_id;
     char* event_start;
     char* event_end;
-    unsigned long event_duration;
+    double event_duration;
     struct Root_xfer xfer;
     char* hostname;
 };
@@ -468,7 +468,7 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
     result.flow_id = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.event_start = NULL;
     result.event_end = NULL;
-    result.event_duration = NULL;
+    result.event_duration = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.xfer.source.bytes = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.xfer.source.packets = RANDOM_UNINTIALIZED_NUMBER_VALUE;
     result.xfer.destination.bytes = RANDOM_UNINTIALIZED_NUMBER_VALUE;
@@ -583,7 +583,7 @@ static struct Root_data getRootDataStructure(const char* originalJsonStr)
         json_object* event_duration;
         if (json_object_object_get_ex(event_object, "duration", &event_duration))
         {
-            result.event_duration = json_object_get_int(event_duration);
+            result.event_duration = json_object_get_double(event_duration);
         }
     }
 
@@ -1033,7 +1033,7 @@ static void add_Root_Data(json_object** root_object,  struct Root_data rootDataS
         json_object_object_add(event_object, "end", json_object_new_string(rootDataStructure.event_end));
     }
 
-    if (rootDataStructure.event_duration != NULL)
+    if (rootDataStructure.event_duration != RANDOM_UNINTIALIZED_NUMBER_VALUE)
     {
         json_object_object_add(event_object, "duration", json_object_new_int64(rootDataStructure.event_duration));
     }

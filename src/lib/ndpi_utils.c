@@ -1415,15 +1415,15 @@ static void ndpi_tls2json(struct ndpi_detection_module_struct *ndpi_struct, ndpi
                                      flow->protos.tls_quic.server_names);
       }
 
-      if(before) {
-        strftime(notBefore, sizeof(notBefore), "%Y-%m-%d %H:%M:%S", before);
-        ndpi_serialize_string_string(serializer, "notbefore", notBefore);
-      }
+      // if(before) {
+        // strftime(notBefore, sizeof(notBefore), "%Y-%m-%d %H:%M:%S", before);
+        // ndpi_serialize_string_string(serializer, "notbefore", notBefore);
+      // }
 
-      if(after) {
-        strftime(notAfter, sizeof(notAfter), "%Y-%m-%d %H:%M:%S", after);
-        ndpi_serialize_string_string(serializer, "notafter", notAfter);
-      }
+      // if(after) {
+        // strftime(notAfter, sizeof(notAfter), "%Y-%m-%d %H:%M:%S", after);
+        // ndpi_serialize_string_string(serializer, "notafter", notAfter);
+      // }
 
       ndpi_serialize_string_string(serializer, "ja3s", flow->protos.tls_quic.ja3_server);
       ndpi_serialize_string_string(serializer, "ja4", flow->protos.tls_quic.ja4_client);

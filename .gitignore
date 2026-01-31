@@ -226,3 +226,5 @@ stamp-h1
 /windows/packages/pthreads.redist.2.9.1.4
 /windows/bin/x64_Debug-ndpiReader/ndpiReader.exe
 /windows/obj/nDPI_Debug-ndpiReader_x64/nDPI.vcxproj.FileListAbsolute.txt
+/windows/bin/x64_Debug-ndpiReader
+/windows/.vs/nDPI

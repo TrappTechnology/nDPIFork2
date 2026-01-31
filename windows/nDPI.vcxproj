@@ -9,6 +9,10 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{7331961B-A2B5-45B1-B144-AFDEFBB0EB01}</ProjectGuid>
@@ -20,13 +24,19 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>NotSet</CharacterSet>
     <SpectreMitigation>false</SpectreMitigation>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug-ndpiReader|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>NotSet</CharacterSet>
+    <SpectreMitigation>false</SpectreMitigation>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>NotSet</CharacterSet>
     <SpectreMitigation>false</SpectreMitigation>
   </PropertyGroup>
@@ -37,6 +47,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug-ndpiReader|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -60,11 +73,20 @@
     <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
     <Linkage-pthreads>static</Linkage-pthreads>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(SolutionDir)obj\$(ProjectName)_$(Configuration)_$(Platform)\</IntDir>
+    <OutDir>$(ProjectDir)bin\$(Platform)_$(Configuration)\</OutDir>
+    <IncludePath>$(IncludePath)</IncludePath>
+    <TargetName>ndpiReader</TargetName>
+    <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+    <Linkage-pthreads>static</Linkage-pthreads>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(ProjectDir)src\;$(ProjectDir)src\lib\;$(ProjectDir)..\src\lib\;$(ProjectDir)..\src\include\;$(ProjectDir)..\;$(ProjectDir)..\src\lib\third_party\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>USE_OLD_ROARING;NDPI_LIB_COMPILATION;WIN32;_WIN64;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+       <PreprocessorDefinitions>USE_OLD_ROARING;NDPI_LIB_COMPILATION;WIN32;_WIN64;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
@@ -93,7 +115,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(ProjectDir)src\;$(ProjectDir)src\lib\;$(ProjectDir)..\src\lib\;$(ProjectDir)..\src\include\;$(ProjectDir)..\;$(ProjectDir)..\src\lib\third_party\include\;$(ProjectDir)..\windows\WpdPack\Include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>PTW32_STATIC_LIB;STATIC_GETOPT;USE_OLD_ROARING;NDPI_LIB_COMPILATION;HAVE_STRUCT_TIMESPEC;WIN32;_WIN64;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>PTW32_STATIC_LIB;STATIC_GETOPT;NDPI_LIB_COMPILATION;HAVE_STRUCT_TIMESPEC;WIN32;_WIN64;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>
@@ -109,20 +131,52 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(ProjectDir)..\windows\packages\pthreads.2.9.1.4\build\native\lib\v110\x64\Debug\static\cdecl\libpthread-static.lib;Ws2_32.lib;$(ProjectDir)..\windows\WpdPack\Lib\x64\wpcap.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>$(ProjectDir)..\windows\packages\pthreads.2.9.1.4\build\native\lib\v110\x64\Debug\static\cdecl\libpthread-static.lib;Ws2_32.lib;$(ProjectDir)..\windows\pcap\Lib\x64\pcap.lib;$(ProjectDir)..\json-c\lib\json-c-static.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <AssemblyDebug>true</AssemblyDebug>
     </Link>
     <PostBuildEvent />
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalIncludeDirectories>$(ProjectDir)src\;$(ProjectDir)src\lib\;$(ProjectDir)..\src\lib\;$(ProjectDir)..\src\include\;$(ProjectDir)..\;$(ProjectDir)..\src\lib\third_party\include\;$(ProjectDir)..\windows\WpdPack\Include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>PTW32_STATIC_LIB;STATIC_GETOPT;NDPI_LIB_COMPILATION;HAVE_STRUCT_TIMESPEC;WIN32;_WIN64;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <StringPooling>false</StringPooling>
+      <ProgramDataBaseFileName>$(TargetDir)$(TargetName).pdb</ProgramDataBaseFileName>
+      <ExceptionHandling>false</ExceptionHandling>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalUsingDirectories>$(ProjectDir);%(AdditionalUsingDirectories)</AdditionalUsingDirectories>
+      <LanguageStandard_C>Default</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>$(ProjectDir)..\windows\packages\pthreads.2.9.1.4\build\native\lib\v110\x64\Release\static\cdecl\libpthread-static.lib;Ws2_32.lib;$(ProjectDir)..\windows\pcap\Lib\x64\pcap.lib;$(ProjectDir)..\json-c\lib\json-c-static.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
+      <AssemblyDebug>true</AssemblyDebug>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+    <PostBuildEvent />
+  </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\example\nDPIJsonDataConverter.c" />
     <ClCompile Include="..\example\ndpiReader.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="..\example\reader_util.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\example\ReadJsonConfiguration.c" />
     <ClCompile Include="..\src\lib\ndpi_analyze.c" />
     <ClCompile Include="..\src\lib\ndpi_bitmap.c" />
     <ClCompile Include="..\src\lib\ndpi_classify.c" />
@@ -130,12 +184,12 @@
     <ClCompile Include="..\src\lib\ndpi_geoip.c" />
     <ClCompile Include="..\src\lib\ndpi_main.c" />
     <ClCompile Include="..\src\lib\ndpi_cache.c" />
-    <ClCompile Include="..\src\lib\ndpi_config.c" />
+	<ClCompile Include="..\src\lib\ndpi_config.c" />
     <ClCompile Include="..\src\lib\ndpi_filter.c" />
     <ClCompile Include="..\src\lib\ndpi_memory.c" />
     <ClCompile Include="..\src\lib\ndpi_serializer.c" />
     <ClCompile Include="..\src\lib\ndpi_utils.c" />
-    <ClCompile Include="..\src\lib\ndpi_fingerprint.c" />
+	<ClCompile Include="..\src\lib\ndpi_fingerprint.c" />
     <ClCompile Include="..\src\lib\ndpi_domains.c" />
     <ClCompile Include="..\src\lib\ndpi_binary_bitmap.c" />
     <ClCompile Include="..\src\lib\ndpi_hash.c" />
@@ -249,7 +303,7 @@
     <ClCompile Include="..\src\lib\protocols\edonkey.c" />
     <ClCompile Include="..\src\lib\protocols\ftp_control.c" />
     <ClCompile Include="..\src\lib\protocols\ftp_data.c" />
-    <ClCompile Include="..\src\lib\protocols\gearup_booster.c" />
+	<ClCompile Include="..\src\lib\protocols\gearup_booster.c" />
     <ClCompile Include="..\src\lib\protocols\git.c" />
     <ClCompile Include="..\src\lib\protocols\gnutella.c" />
     <ClCompile Include="..\src\lib\protocols\gtp.c" />
@@ -266,7 +320,7 @@
     <ClCompile Include="..\src\lib\protocols\kakaotalk_voice.c" />
     <ClCompile Include="..\src\lib\protocols\kcp.c" />
     <ClCompile Include="..\src\lib\protocols\kerberos.c" />
-    <ClCompile Include="..\src\lib\protocols\lagofast.c" />
+	<ClCompile Include="..\src\lib\protocols\lagofast.c" />
     <ClCompile Include="..\src\lib\protocols\ldap.c" />
     <ClCompile Include="..\src\lib\protocols\hcl_notes.c" />
     <ClCompile Include="..\src\lib\protocols\mail_imap.c" />
@@ -309,7 +363,7 @@
     <ClCompile Include="..\src\lib\protocols\rtp.c" />
     <ClCompile Include="..\src\lib\protocols\rtsp.c" />
     <ClCompile Include="..\src\lib\protocols\rx.c" />
-    <ClCompile Include="..\src\lib\protocols\samsung_sdp.c" />
+	<ClCompile Include="..\src\lib\protocols\samsung_sdp.c" />
     <ClCompile Include="..\src\lib\protocols\sflow.c" />
     <ClCompile Include="..\src\lib\protocols\sip.c" />
     <ClCompile Include="..\src\lib\protocols\skinny.c" />
@@ -321,7 +375,7 @@
     <ClCompile Include="..\src\lib\protocols\spotify.c" />
     <ClCompile Include="..\src\lib\protocols\ssdp.c" />
     <ClCompile Include="..\src\lib\protocols\ssh.c" />
-    <ClCompile Include="..\src\lib\protocols\blizzard.c" />
+	<ClCompile Include="..\src\lib\protocols\blizzard.c" />
     <ClCompile Include="..\src\lib\protocols\steam.c" />
     <ClCompile Include="..\src\lib\protocols\stun.c" />
     <ClCompile Include="..\src\lib\protocols\syslog.c" />
@@ -336,7 +390,7 @@
     <ClCompile Include="..\src\lib\protocols\thrift.c" />
     <ClCompile Include="..\src\lib\protocols\tplink_shp.c" />
     <ClCompile Include="..\src\lib\protocols\tuya_lp.c" />
-    <ClCompile Include="..\src\lib\protocols\tristation.c" />
+	<ClCompile Include="..\src\lib\protocols\tristation.c" />
     <ClCompile Include="..\src\lib\protocols\ubntac2.c" />
     <ClCompile Include="..\src\lib\protocols\usenet.c" />
     <ClCompile Include="..\src\lib\protocols\viber.c" />
@@ -361,7 +415,7 @@
     <ClCompile Include="..\src\lib\protocols\hislip.c" />
     <ClCompile Include="..\src\lib\protocols\uftp.c" />
     <ClCompile Include="..\src\lib\protocols\openflow.c" />
-    <ClCompile Include="..\src\lib\protocols\json.c" />
+	<ClCompile Include="..\src\lib\protocols\json.c" />
     <ClCompile Include="..\src\lib\protocols\json-rpc.c" />
     <ClCompile Include="..\src\lib\protocols\kafka.c" />
     <ClCompile Include="..\src\lib\protocols\nomachine.c" />
@@ -402,7 +456,7 @@
     <ClCompile Include="..\src\lib\protocols\lustre.c" />
     <ClCompile Include="..\src\lib\protocols\dingtalk.c" />
     <ClCompile Include="..\src\lib\protocols\paltalk.c" />
-    <ClCompile Include="..\src\lib\protocols\msdo.c" />
+	<ClCompile Include="..\src\lib\protocols\msdo.c" />
     <ClCompile Include="..\src\lib\protocols\melsec.c" />
     <ClCompile Include="..\src\lib\protocols\hamachi.c" />
     <ClCompile Include="..\src\lib\protocols\glbp.c" />
@@ -426,9 +480,11 @@
     <ClCompile Include="src\win-gettimeofday.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\example\nDPIJsonDataConverter.h" />
     <ClInclude Include="..\example\reader_util.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="..\example\ReadJsonConfiguration.h" />
     <ClInclude Include="..\src\include\ndpi_encryption.h" />
     <ClInclude Include="..\src\include\ndpi_main.h" />
     <ClInclude Include="..\src\include\ndpi_patricia_typedefs.h" />
@@ -453,7 +509,7 @@
     <ClInclude Include="..\src\lib\third_party\include\ndpi_sha1.h" />
     <ClInclude Include="..\src\lib\third_party\include\rce_injection.h" />
     <ClInclude Include="..\src\lib\third_party\include\roaring.h" />
-    <ClInclude Include="..\src\lib\third_party\include\roaring_v2.h" />
+	<ClInclude Include="..\src\lib\third_party\include\roaring_v2.h" />
     <ClInclude Include="..\src\lib\third_party\include\uthash.h" />
     <ClInclude Include="..\src\lib\ndpi_private.h" />
     <ClInclude Include="arpa\inet.h" />
